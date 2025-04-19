@@ -1,0 +1,299 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a71b8c50784bdbe41bb30c7a101724eb, type: 3}
+  m_Name: DialogueDataTest03
+  m_EditorClassIdentifier: 
+  nodes:
+  - id: 5b456d49-7e0f-4821-96dd-66e7fb50eb8d
+    title: 2
+    windowRect:
+      serializedVersion: 2
+      x: 1077.6777
+      y: 168.11078
+      width: 522.32965
+      height: 257.80157
+    speaker:
+      id: 
+      name:
+        key: 
+        defaultText: c
+      portraitId: 
+      voiceClip: {fileID: 0}
+    text:
+      key: 
+      defaultText: qqqq
+    choices:
+    - text:
+        key: 
+        defaultText: 22
+      nextNodeId: 
+      conditions: []
+      actions: []
+      onSelected:
+        m_PersistentCalls:
+          m_Calls: []
+    - text:
+        key: 
+        defaultText: 33
+      nextNodeId: 
+      conditions: []
+      actions: []
+      onSelected:
+        m_PersistentCalls:
+          m_Calls: []
+    nextNodeIds:
+    - 2e3917a1-9b12-4bb6-9222-0cac4339b247
+    - b047b633-0b50-4f72-a5e9-80806c30da02
+    isEndNode: 0
+    effects: []
+    onNodeEnter:
+      m_PersistentCalls:
+        m_Calls: []
+    onNodeExit:
+      m_PersistentCalls:
+        m_Calls: []
+  - id: 2e3917a1-9b12-4bb6-9222-0cac4339b247
+    title: 0
+    windowRect:
+      serializedVersion: 2
+      x: 645.16327
+      y: -5.0367165
+      width: 351.61075
+      height: 253.54636
+    speaker:
+      id: 
+      name:
+        key: 
+        defaultText: a
+      portraitId: 
+      voiceClip: {fileID: 0}
+    text:
+      key: 
+      defaultText: aaaa
+    choices:
+    - text:
+        key: 
+        defaultText: 11
+      nextNodeId: 
+      conditions: []
+      actions: []
+      onSelected:
+        m_PersistentCalls:
+          m_Calls: []
+    - text:
+        key: 
+        defaultText: 22
+      nextNodeId: 
+      conditions: []
+      actions: []
+      onSelected:
+        m_PersistentCalls:
+          m_Calls: []
+    nextNodeIds:
+    - 5b456d49-7e0f-4821-96dd-66e7fb50eb8d
+    - 8ccd0472-bfcf-4f8b-b9d4-d7892c473c96
+    isEndNode: 0
+    effects: []
+    onNodeEnter:
+      m_PersistentCalls:
+        m_Calls: []
+    onNodeExit:
+      m_PersistentCalls:
+        m_Calls: []
+  - id: 8ccd0472-bfcf-4f8b-b9d4-d7892c473c96
+    title: 1
+    windowRect:
+      serializedVersion: 2
+      x: -4.707655
+      y: 176.58888
+      width: 508.3656
+      height: 257.70294
+    speaker:
+      id: 
+      name:
+        key: 
+        defaultText: b
+      portraitId: 
+      voiceClip: {fileID: 0}
+    text:
+      key: 
+      defaultText: ssssss
+    choices:
+    - text:
+        key: 
+        defaultText: 44
+      nextNodeId: 
+      conditions: []
+      actions: []
+      onSelected:
+        m_PersistentCalls:
+          m_Calls: []
+    nextNodeIds:
+    - b3344fd6-b1f9-4051-89cf-14c3e72f1aaf
+    isEndNode: 0
+    effects: []
+    onNodeEnter:
+      m_PersistentCalls:
+        m_Calls: []
+    onNodeExit:
+      m_PersistentCalls:
+        m_Calls: []
+  - id: b3344fd6-b1f9-4051-89cf-14c3e72f1aaf
+    title: 3
+    windowRect:
+      serializedVersion: 2
+      x: 13.94385
+      y: 650.8135
+      width: 400.61884
+      height: 256.3296
+    speaker:
+      id: 
+      name:
+        key: 
+        defaultText: d
+      portraitId: 
+      voiceClip: {fileID: 0}
+    text:
+      key: 
+      defaultText: cccccc
+    choices:
+    - text:
+        key: 
+        defaultText: 66
+      nextNodeId: 
+      conditions: []
+      actions: []
+      onSelected:
+        m_PersistentCalls:
+          m_Calls: []
+    nextNodeIds:
+    - 2e3917a1-9b12-4bb6-9222-0cac4339b247
+    isEndNode: 0
+    effects: []
+    onNodeEnter:
+      m_PersistentCalls:
+        m_Calls: []
+    onNodeExit:
+      m_PersistentCalls:
+        m_Calls: []
+  - id: b047b633-0b50-4f72-a5e9-80806c30da02
+    title: 5
+    windowRect:
+      serializedVersion: 2
+      x: 1127.6648
+      y: 539.1232
+      width: 492.49332
+      height: 279.5733
+    speaker:
+      id: 
+      name:
+        key: 
+        defaultText: f
+      portraitId: 
+      voiceClip: {fileID: 0}
+    text:
+      key: 
+      defaultText: rrrrr
+    choices:
+    - text:
+        key: 
+        defaultText: "\uC0C8 \uC120\uD0DD\uC9C0"
+      nextNodeId: 
+      conditions: []
+      actions: []
+      onSelected:
+        m_PersistentCalls:
+          m_Calls: []
+    - text:
+        key: 
+        defaultText: "\uC0C8 \uC120\uD0DD\uC9C0"
+      nextNodeId: 
+      conditions: []
+      actions: []
+      onSelected:
+        m_PersistentCalls:
+          m_Calls: []
+    nextNodeIds:
+    - 5b456d49-7e0f-4821-96dd-66e7fb50eb8d
+    - 
+    isEndNode: 0
+    effects: []
+    onNodeEnter:
+      m_PersistentCalls:
+        m_Calls: []
+    onNodeExit:
+      m_PersistentCalls:
+        m_Calls: []
+  - id: 54ddb3d1-6dbe-49ce-85f0-abb5fb2ced56
+    title: 4
+    windowRect:
+      serializedVersion: 2
+      x: 594.9175
+      y: 605.0572
+      width: 388.53558
+      height: 311.06396
+    speaker:
+      id: 
+      name:
+        key: 
+        defaultText: e
+      portraitId: 
+      voiceClip: {fileID: 0}
+    text:
+      key: 
+      defaultText: www
+    choices:
+    - text:
+        key: 
+        defaultText: "\uC0C8 \uC120\uD0DD\uC9C0"
+      nextNodeId: 
+      conditions: []
+      actions: []
+      onSelected:
+        m_PersistentCalls:
+          m_Calls: []
+    - text:
+        key: 
+        defaultText: "\uC0C8 \uC120\uD0DD\uC9C0"
+      nextNodeId: 
+      conditions: []
+      actions: []
+      onSelected:
+        m_PersistentCalls:
+          m_Calls: []
+    nextNodeIds:
+    - 2e3917a1-9b12-4bb6-9222-0cac4339b247
+    - 54ddb3d1-6dbe-49ce-85f0-abb5fb2ced56
+    isEndNode: 0
+    effects: []
+    onNodeEnter:
+      m_PersistentCalls:
+        m_Calls: []
+    onNodeExit:
+      m_PersistentCalls:
+        m_Calls: []
+  cycleInfos:
+  - fromId: b047b633-0b50-4f72-a5e9-80806c30da02
+    toId: b3344fd6-b1f9-4051-89cf-14c3e72f1aaf
+    hasEscape: 1
+  - fromId: b3344fd6-b1f9-4051-89cf-14c3e72f1aaf
+    toId: 8ccd0472-bfcf-4f8b-b9d4-d7892c473c96
+    hasEscape: 1
+  - fromId: 8ccd0472-bfcf-4f8b-b9d4-d7892c473c96
+    toId: 2e3917a1-9b12-4bb6-9222-0cac4339b247
+    hasEscape: 1
+  - fromId: 2e3917a1-9b12-4bb6-9222-0cac4339b247
+    toId: 5b456d49-7e0f-4821-96dd-66e7fb50eb8d
+    hasEscape: 1
+  - fromId: 5b456d49-7e0f-4821-96dd-66e7fb50eb8d
+    toId: b047b633-0b50-4f72-a5e9-80806c30da02
+    hasEscape: 1

@@ -1,0 +1,16 @@
+{
+  "dialogues": [
+    {
+      "id": "intro_001",
+      "speaker": "주인공",
+      "text": "여기가 어디지...?",
+      "emotion": "confused"
+    },
+    {
+      "id": "intro_002",
+      "speaker": "???",
+      "text": "드디어 깨어나셨군요.",
+      "emotion": "happy"
+    }
+  ]
+} 

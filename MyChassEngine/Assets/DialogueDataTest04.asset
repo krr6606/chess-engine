@@ -1,0 +1,240 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a71b8c50784bdbe41bb30c7a101724eb, type: 3}
+  m_Name: DialogueDataTest04
+  m_EditorClassIdentifier: 
+  nodes:
+  - id: 261131c5-30c6-428e-a51a-a78439920b5c
+    title: 3
+    windowRect:
+      serializedVersion: 2
+      x: 706
+      y: 541.3001
+      width: 466.16278
+      height: 369.48828
+    speaker:
+      id: 
+      name:
+        key: 
+        defaultText: 
+      portraitId: 
+      voiceClip: {fileID: 0}
+    text:
+      key: 
+      defaultText: 
+    choices:
+    - text:
+        key: 
+        defaultText: aaaa
+      nextNodeId: 
+      conditions: []
+      actions: []
+      onSelected:
+        m_PersistentCalls:
+          m_Calls: []
+    - text:
+        key: 
+        defaultText: bbbb
+      nextNodeId: 
+      conditions: []
+      actions: []
+      onSelected:
+        m_PersistentCalls:
+          m_Calls: []
+    - text:
+        key: 
+        defaultText: cccc
+      nextNodeId: 
+      conditions: []
+      actions: []
+      onSelected:
+        m_PersistentCalls:
+          m_Calls: []
+    - text:
+        key: 
+        defaultText: dddd
+      nextNodeId: 
+      conditions: []
+      actions: []
+      onSelected:
+        m_PersistentCalls:
+          m_Calls: []
+    nextNodeIds:
+    - e633a869-76ee-4302-a912-728654909e42
+    - 3fa70046-01a3-496e-8bdd-9321c16f0fa3
+    - 27ae8961-b706-48b9-b914-a1c1908f8df7
+    - 261131c5-30c6-428e-a51a-a78439920b5c
+    isEndNode: 0
+    effects: []
+    onNodeEnter:
+      m_PersistentCalls:
+        m_Calls: []
+    onNodeExit:
+      m_PersistentCalls:
+        m_Calls: []
+  - id: 3fa70046-01a3-496e-8bdd-9321c16f0fa3
+    title: 1
+    windowRect:
+      serializedVersion: 2
+      x: 128.40002
+      y: 190.90001
+      width: 371.48282
+      height: 417.63995
+    speaker:
+      id: 
+      name:
+        key: 
+        defaultText: 
+      portraitId: 
+      voiceClip: {fileID: 0}
+    text:
+      key: 
+      defaultText: 
+    choices:
+    - text:
+        key: 
+        defaultText: aa
+      nextNodeId: 
+      conditions: []
+      actions: []
+      onSelected:
+        m_PersistentCalls:
+          m_Calls: []
+    - text:
+        key: 
+        defaultText: bb
+      nextNodeId: 
+      conditions: []
+      actions: []
+      onSelected:
+        m_PersistentCalls:
+          m_Calls: []
+    - text:
+        key: 
+        defaultText: cc
+      nextNodeId: 
+      conditions: []
+      actions: []
+      onSelected:
+        m_PersistentCalls:
+          m_Calls: []
+    nextNodeIds:
+    - 27ae8961-b706-48b9-b914-a1c1908f8df7
+    - 261131c5-30c6-428e-a51a-a78439920b5c
+    - 3fa70046-01a3-496e-8bdd-9321c16f0fa3
+    isEndNode: 0
+    effects: []
+    onNodeEnter:
+      m_PersistentCalls:
+        m_Calls: []
+    onNodeExit:
+      m_PersistentCalls:
+        m_Calls: []
+  - id: 27ae8961-b706-48b9-b914-a1c1908f8df7
+    title: 2
+    windowRect:
+      serializedVersion: 2
+      x: 729.99994
+      y: 31.699982
+      width: 505.21588
+      height: 298.18533
+    speaker:
+      id: 
+      name:
+        key: 
+        defaultText: 
+      portraitId: 
+      voiceClip: {fileID: 0}
+    text:
+      key: 
+      defaultText: 
+    choices:
+    - text:
+        key: 
+        defaultText: aaa
+      nextNodeId: 
+      conditions: []
+      actions: []
+      onSelected:
+        m_PersistentCalls:
+          m_Calls: []
+    - text:
+        key: 
+        defaultText: bbb
+      nextNodeId: 
+      conditions: []
+      actions: []
+      onSelected:
+        m_PersistentCalls:
+          m_Calls: []
+    nextNodeIds:
+    - 3fa70046-01a3-496e-8bdd-9321c16f0fa3
+    - 27ae8961-b706-48b9-b914-a1c1908f8df7
+    isEndNode: 0
+    effects: []
+    onNodeEnter:
+      m_PersistentCalls:
+        m_Calls: []
+    onNodeExit:
+      m_PersistentCalls:
+        m_Calls: []
+  - id: e633a869-76ee-4302-a912-728654909e42
+    title: 4
+    windowRect:
+      serializedVersion: 2
+      x: 1207.6
+      y: 327.69998
+      width: 371.65076
+      height: 308.4229
+    speaker:
+      id: 
+      name:
+        key: 
+        defaultText: 
+      portraitId: 
+      voiceClip: {fileID: 0}
+    text:
+      key: 
+      defaultText: 
+    choices:
+    - text:
+        key: 
+        defaultText: aaaaa
+      nextNodeId: 
+      conditions: []
+      actions: []
+      onSelected:
+        m_PersistentCalls:
+          m_Calls: []
+    nextNodeIds:
+    - 27ae8961-b706-48b9-b914-a1c1908f8df7
+    isEndNode: 0
+    effects: []
+    onNodeEnter:
+      m_PersistentCalls:
+        m_Calls: []
+    onNodeExit:
+      m_PersistentCalls:
+        m_Calls: []
+  cycleInfos:
+  - fromId: 3fa70046-01a3-496e-8bdd-9321c16f0fa3
+    toId: 27ae8961-b706-48b9-b914-a1c1908f8df7
+    hasEscape: 0
+  - fromId: 27ae8961-b706-48b9-b914-a1c1908f8df7
+    toId: e633a869-76ee-4302-a912-728654909e42
+    hasEscape: 0
+  - fromId: e633a869-76ee-4302-a912-728654909e42
+    toId: 261131c5-30c6-428e-a51a-a78439920b5c
+    hasEscape: 0
+  - fromId: 261131c5-30c6-428e-a51a-a78439920b5c
+    toId: 3fa70046-01a3-496e-8bdd-9321c16f0fa3
+    hasEscape: 0
