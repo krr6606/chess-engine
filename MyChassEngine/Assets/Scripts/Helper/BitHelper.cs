@@ -28,7 +28,7 @@ public static class BitHelper
     {
         if (square < 0 || square >= 64)
         {
-            Debug.LogWarning($"SetBit: 유효하지 않은 인덱스: {square}");
+
             return 0;
         }
         return 1UL << square;

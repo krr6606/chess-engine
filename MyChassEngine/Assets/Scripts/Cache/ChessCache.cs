@@ -44,6 +44,25 @@ public static class ChessCache
     public static readonly ulong BlackKingSideCastlePath = 0x6000000000000000UL;
     public static readonly ulong BlackQueenSideCastlePath = 0x0E00000000000000UL;
 
+    // 비숍 색상 마스크
+    public static readonly ulong LightSquaresMask = 0x55AA55AA55AA55AAUL; // 밝은 색 칸
+    public static readonly ulong DarkSquaresMask = 0xAA55AA55AA55AA55UL;  // 어두운 색 칸
+
+    // 중앙 점령 마스크
+    public static readonly ulong CentralSquaresMask = 0x0000001818000000UL; // 중앙 4칸 (d4, d5, e4, e5)
+    public static readonly ulong ExtendedCentralSquaresMask = 0x00003C3C3C3C0000UL; // 확장된 중앙 16칸
+
+    // 킹 안전성 마스크
+    public static readonly ulong[] KingSafetyMask = new ulong[64]; // 킹 주변 8칸
+
+    // 나이트 아웃포스트 마스크
+    public static readonly ulong WhiteKnightOutpostMask = 0x00007E7E00000000UL; // 백색 나이트 아웃포스트 영역
+    public static readonly ulong BlackKnightOutpostMask = 0x000000007E7E0000UL; // 흑색 나이트 아웃포스트 영역
+
+    // 제7, 8열 마스크 (룩/퀸 관련)
+    public static readonly ulong WhiteSeventhRankMask = 0x00FF000000000000UL; // 백색 7번째 랭크
+    public static readonly ulong BlackSeventhRankMask = 0x000000000000FF00UL; // 흑색 7번째 랭크
+
     // 기물 이동 오프셋
     public static readonly int[] KnightOffsets = { -17, -15, -10, -6, 6, 10, 15, 17 }; // 나이트 이동
     public static readonly int[] KingOffsets = { -9, -8, -7, -1, 1, 7, 8, 9 }; // 킹 이동
@@ -62,6 +81,9 @@ public static class ChessCache
     public static readonly int[][] ValidWhitePawnMoves = new int[64][]; // 각 위치별 유효한 흰색 폰 이동
     public static readonly int[][] ValidBlackPawnMoves = new int[64][]; // 각 위치별 유효한 검은색 폰 이동
 
+    // MVV-LVA 테이블 (기물 교환 우선순위)
+    public static readonly int[,] MvvLvaTable = new int[7, 7]; // [공격당하는 기물, 공격하는 기물]
+
     // 슬라이딩 피스 이동 경로 캐시
     public static readonly ulong[][] BishopPaths = new ulong[64][]; // 각 위치별 비숍의 가능한 모든 이동 경로
 
@@ -77,7 +99,6 @@ public static class ChessCache
     public static readonly ulong[][][] QueenDirectionPaths = new ulong[64][][]; // 각 위치별 퀸의 방향별 이동 경로
 
     // 폰 캡처 관련 캐시
-
     public static readonly ulong[] WhitePawnCaptureMasks = new ulong[64]; // 각 위치별 흰색 폰의 캡처 가능 위치
     public static readonly ulong[] BlackPawnCaptureMasks = new ulong[64]; // 각 위치별 검은색 폰의 캡처 가능 위치
     #endregion
@@ -101,6 +122,10 @@ public static class ChessCache
             // 3. 유효한 이동 초기화
             InitializeValidMoves();
             InitializePawnCaptures();
+            
+            // 4. 추가 평가 캐시 초기화
+            InitializeKingSafetyMasks();
+            InitializeMvvLvaTable();
             
             Debug.Log("ChessCache 초기화 완료");
         }
@@ -575,6 +600,50 @@ public static class ChessCache
             }
 
             BlackPawnCaptureMasks[square] = blackCaptureMask;
+        }
+    }
+
+    // 킹 안전성 마스크 초기화
+    private static void InitializeKingSafetyMasks()
+    {
+        for (int square = 0; square < 64; square++)
+        {
+            int rank = square / 8;
+            int file = square % 8;
+            ulong mask = 0UL;
+
+            // 킹 주변 8칸을 마스크에 추가
+            for (int r = Math.Max(0, rank - 1); r <= Math.Min(7, rank + 1); r++)
+            {
+                for (int f = Math.Max(0, file - 1); f <= Math. Min(7, file + 1); f++)
+                {
+                    int targetSquare = r * 8 + f;
+                    if (targetSquare != square) // 킹 자신의 위치는 제외
+                    {
+                        mask |= 1UL << targetSquare;
+                    }
+                }
+            }
+
+            KingSafetyMask[square] = mask;
+        }
+    }
+    
+    // MVV-LVA 테이블 초기화
+    private static void InitializeMvvLvaTable()
+    {
+        // MVV-LVA 테이블 채우기
+        // 기물 가치: 없음(0), 폰(1), 나이트(2), 비숍(3), 룩(4), 퀸(5), 킹(6)
+        int[] pieceValues = { 0, 100, 320, 330, 500, 900, 10000 };
+
+        for (int victim = 1; victim <= 6; victim++)
+        {
+            for (int attacker = 1; attacker <= 6; attacker++)
+            {
+                // 피해자 가치 * 100 - 공격자 가치
+                // 이렇게 하면 작은 기물로 큰 기물을 잡는 것이 우선순위가 높아짐
+                MvvLvaTable[victim, attacker] = pieceValues[victim] * 100 - pieceValues[attacker];
+            }
         }
     }
     #endregion

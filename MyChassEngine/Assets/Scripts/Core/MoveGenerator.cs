@@ -13,6 +13,67 @@ public class MoveGenerator
 		private ChessGameState gameState;
 		private int currMoveIndex;
 		private ulong moveTypeMask;
+		
+		// MVV-LVA 이동 정렬을 위한 메소드 추가
+		public void SortMovesByMVVLVA(List<Move> moves, ChessGameState state)
+		{
+			// MVV-LVA 점수 계산 함수
+			int GetMoveScore(Move move)
+			{
+				// 기본 점수 - 캡처 이동 우선
+				if (move.IsCapture)
+				{
+					int victimPiece = state.FindPieceBitboardIndex(move.ToSquare);
+					int attackerPiece = state.FindPieceBitboardIndex(move.FromSquare);
+					
+					// 유효하지 않은 인덱스 처리
+					if (victimPiece < 0 || attackerPiece < 0)
+						return 0;
+					
+					// MVV-LVA 점수: 희생자 가치 * 100 - 공격자 가치
+					// victimType과 attackerType을 비트보드 인덱스에서 피스 타입으로 변환
+					int victimType = victimPiece % 6; // 0=폰, 1=나이트, 2=비숍, 3=룩, 4=퀸, 5=킹
+					int attackerType = attackerPiece % 6;
+					
+					// 피스 가치: 폰=1, 나이트=3, 비숍=3, 룩=5, 퀸=9, 킹=0(캡처 대상이 아님)
+					int[] pieceValues = { 1, 3, 3, 5, 9, 0 };
+					
+					return pieceValues[victimType] * 100 - pieceValues[attackerType];
+				}
+				
+				// 프로모션 우선
+				if (move.IsPromotion) return 900;
+				
+				// 체크 이동 우선 (체크 확인은 비용이 많이 들어 여기서는 생략)
+				if (move.HasFlag(Move.CheckFlag)) return 800;
+				
+				// 일반 이동
+				return 0;
+			}
+			
+			// 이동 정렬 - 일관된 비교를 위해 추가 기준 포함
+			moves.Sort((a, b) => {
+				// 먼저 MVV-LVA 점수 비교
+				int scoreA = GetMoveScore(a);
+				int scoreB = GetMoveScore(b);
+				int scoreCompare = scoreB.CompareTo(scoreA);
+				
+				// 점수가 같으면 기물 타입으로 비교
+				if (scoreCompare == 0)
+				{
+					// 출발 위치 비교
+					int fromCompare = a.FromSquare.CompareTo(b.FromSquare);
+					if (fromCompare != 0)
+						return fromCompare;
+					
+					// 도착 위치 비교
+					return a.ToSquare.CompareTo(b.ToSquare);
+				}
+				
+				return scoreCompare;
+			});
+		}
+		
     		public List<Move> GenerateMoves(ChessGameState board, bool includeQuietMoves = true)
 		{
 			if (board == null) throw new ArgumentNullException(nameof(board));
@@ -42,43 +103,7 @@ public class MoveGenerator
 					GenerateQueenMoves(board, moves, false);
 				}
 
-				// 생성된 모든 이동 디버그 출력
-				Debug.Log($"\n===== 생성된 이동 목록 ({(isWhiteTurn ? "백색" : "흑색")} 차례) =====");
-				foreach (var move in moves)
-				{
-					string moveType = "일반 이동";
-					if (move.HasFlag(Move.MoveFlag.Capture)) moveType = "캡처";
-					else if (move.HasFlag(Move.MoveFlag.PawnTwoForward)) moveType = "폰 2칸 전진";
-					else if (move.HasFlag(Move.MoveFlag.EnPassant)) moveType = "앙파상";
-					else if (move.HasFlag(Move.MoveFlag.KingSideCastle)) moveType = "킹 사이드 캐슬링";
-					else if (move.HasFlag(Move.MoveFlag.QueenSideCastle)) moveType = "퀸 사이드 캐슬링";
-					else if (move.HasFlag(Move.MoveFlag.Promotion)) moveType = "프로모션";
 
-					// 기물 타입 확인
-					string pieceType = "알 수 없음";
-					int fromSquare = move.FromSquare;
-					if (fromSquare >= 0 && fromSquare < 64)
-					{
-						int pieceValue = board.Board[fromSquare];
-						if (pieceValue != 0)
-						{
-							bool isWhite = (pieceValue & pieceNum.colorMask) == pieceNum.white;
-							int pieceTypeValue = pieceValue & pieceNum.pieceMask;
-							
-							if ((pieceTypeValue & pieceNum.pwan) != 0) pieceType = "폰";
-							else if ((pieceTypeValue & pieceNum.knight) != 0) pieceType = "나이트";
-							else if ((pieceTypeValue & pieceNum.bishop) != 0) pieceType = "비숍";
-							else if ((pieceTypeValue & pieceNum.rook) != 0) pieceType = "룩";
-							else if ((pieceTypeValue & pieceNum.queen) != 0) pieceType = "퀸";
-							else if ((pieceTypeValue & pieceNum.king) != 0) pieceType = "킹";
-						}
-					}
-
-					string fromCoord = BitHelper.IndexToCoordinate(move.FromSquare);
-					string toCoord = BitHelper.IndexToCoordinate(move.ToSquare);
-					Debug.Log($"{pieceType} {fromCoord} -> {toCoord} ({moveType})");
-				}
-				Debug.Log($"총 {moves.Count}개의 이동이 생성되었습니다.");
 			}
 			catch (Exception e)
 			{
@@ -90,7 +115,204 @@ public class MoveGenerator
 			}
 			return moves;
 		}
-        void Init()
+
+		// 합법적인 이동만 생성하는 메서드 (체크 검사 포함)
+		public List<Move> GenerateLegalMoves(ChessGameState board, bool includeQuietMoves = true)
+		{
+			// 먼저 모든 슈도 리걸 이동 생성
+			List<Move> pseudoLegalMoves = GenerateMoves(board, includeQuietMoves);
+			List<Move> legalMoves = new List<Move>();  
+
+			// 현재 차례의 킹 위치
+			bool isWhiteTurn = board.IsWhiteTurn;
+			int kingSquare = isWhiteTurn ? board.WhiteKingSquare : board.BlackKingSquare;
+			
+			// 체크 상태인지 확인
+			bool inCheck = board.IsInCheck(isWhiteTurn);
+			int checkCount = BitHelper.CountBits(board.checkingPieces);
+			
+ 
+			
+			// 더블 체크인 경우: 킹 이동만 가능
+			if (checkCount > 1)
+			{
+				// 킹 이동만 필터링
+				foreach (var move in pseudoLegalMoves)
+				{
+					// 움직이는 기물이 킹인지 확인
+					int fromSquare = move.FromSquare;
+					int pieceType = board.GetPieceAt(fromSquare) & pieceNum.pieceMask;
+					
+					if (pieceType == pieceNum.king)
+					{
+						// 이동 적용을 위한 게임 상태 복제
+						ChessGameState tempState = board.Clone();
+						
+						// 이동 적용
+						ApplyMove(tempState, move);
+						
+						// 이동 후 자신의 킹이 체크 상태가 아닌지 확인
+						int newKingSquare = move.ToSquare; // 킹이 이동했으므로 새 위치
+						
+						if (!tempState.IsSquareAttacked(newKingSquare, !isWhiteTurn))
+						{
+							legalMoves.Add(move);
+						}
+					}
+				}
+				
+				return legalMoves;
+			}
+			// 싱글 체크인 경우: 1. 킹 이동, 2. 체크하는 기물 제거, 3. 체크를 막는 이동
+			else if (inCheck && checkCount == 1)
+			{
+				foreach (var move in pseudoLegalMoves)
+				{
+					int fromSquare = move.FromSquare;
+					int toSquare = move.ToSquare;
+					int pieceType = board.GetPieceAt(fromSquare) & pieceNum.pieceMask;
+					
+					// 1. 킹 이동인 경우
+					if (pieceType == pieceNum.king)
+					{
+						// 이동 적용을 위한 게임 상태 복제
+						ChessGameState tempState = board.Clone();
+						
+						// 이동 적용
+						ApplyMove(tempState, move);
+						
+						// 이동 후 자신의 킹이 체크 상태가 아닌지 확인
+						int newKingSquare = move.ToSquare;
+						
+						if (!tempState.IsSquareAttacked(newKingSquare, !isWhiteTurn))
+						{
+							legalMoves.Add(move);
+						}
+					}
+					// 2. 체크하는 기물을 제거하는 경우
+					else if ((board.GetCheckingPieces() & (1UL << toSquare)) != 0)
+					{
+						// 이동 적용을 위한 게임 상태 복제
+						ChessGameState tempState = board.Clone();
+						
+						// 이동 적용
+						ApplyMove(tempState, move);
+						
+						// 이동 후 자신의 킹이 체크 상태가 아닌지 확인
+						if (!tempState.IsSquareAttacked(kingSquare, !isWhiteTurn))
+						{
+							legalMoves.Add(move);
+						}
+					}
+					// 3. 체크를 막는 이동 (블로킹)
+					else if ((board.GetCheckBlockingMask() & (1UL << toSquare)) != 0)
+					{
+						// 이동 적용을 위한 게임 상태 복제
+						ChessGameState tempState = board.Clone();
+						
+						// 이동 적용
+						ApplyMove(tempState, move);
+						
+						// 이동 후 자신의 킹이 체크 상태가 아닌지 확인
+						if (!tempState.IsSquareAttacked(kingSquare, !isWhiteTurn))
+						{
+							legalMoves.Add(move);
+						}
+					}
+				}
+				
+				return legalMoves;
+			}
+
+			// 체크 상태가 아닌 경우: 모든 가능한 이동에 대해 체크 여부 검사
+			foreach (var move in pseudoLegalMoves)
+			{
+				// 이동 적용을 위한 게임 상태 복제
+				ChessGameState tempState = board.Clone();
+				
+				// 이동 적용
+				ApplyMove(tempState, move);
+				
+				// 이동하는 기물이 킹인지 확인
+				int fromSquare = move.FromSquare;
+				int pieceType = board.GetPieceAt(fromSquare) & pieceNum.pieceMask;
+				
+				// 킹의 새 위치 결정 (킹이 이동한 경우 새 위치, 아니면 기존 위치)
+				int newKingSquare = (pieceType == pieceNum.king) ? move.ToSquare : kingSquare;
+				
+				// 자신의 킹이 체크 상태가 아니면 합법적인 이동
+				if (!tempState.IsSquareAttacked(newKingSquare, !isWhiteTurn))
+				{
+					legalMoves.Add(move);
+				}
+			}
+
+			return legalMoves;
+		}
+
+		// 이동 적용 도우미 메서드
+		private void ApplyMove(ChessGameState state, Move move)
+		{
+			int fromSquare = move.FromSquare;
+			int toSquare = move.ToSquare;
+			
+			// 기본 이동 적용
+			state.MovePiece(fromSquare, toSquare);
+			
+			// 특수 이동 처리
+			if (move.IsEnPassant)
+			{
+				// 앙파상인 경우 잡히는 폰 위치 계산
+				int capturedPawnSquare = state.IsWhiteTurn ? 
+					toSquare - 8 : toSquare + 8;
+				
+				// 잡히는 폰 제거
+				state.ClearSquare(capturedPawnSquare);
+			}
+			else if (move.HasFlag(Move.KingSideCastleFlag))
+			{
+				// 킹사이드 캐슬링인 경우 룩 이동
+				int rookFromSquare = state.IsWhiteTurn ? 7 : 63;
+				int rookToSquare = state.IsWhiteTurn ? 5 : 61;
+				state.MovePiece(rookFromSquare, rookToSquare);
+			}
+			else if (move.HasFlag(Move.QueenSideCastleFlag))
+			{
+				// 퀸사이드 캐슬링인 경우 룩 이동
+				int rookFromSquare = state.IsWhiteTurn ? 0 : 56;
+				int rookToSquare = state.IsWhiteTurn ? 3 : 59;
+				state.MovePiece(rookFromSquare, rookToSquare);
+			}
+			else if (move.IsPromotion)
+			{
+				// 프로모션인 경우 폰을 해당 기물로 교체
+				int promotionPiece = 0;
+				
+				// 프로모션 기물 타입 결정
+				if (move.HasFlag(Move.PromoteToQueenFlag))
+					promotionPiece = state.IsWhiteTurn ? pieceNum.white | pieceNum.queen : pieceNum.black | pieceNum.queen;
+				else if (move.HasFlag(Move.PromoteToRookFlag))
+					promotionPiece = state.IsWhiteTurn ? pieceNum.white | pieceNum.rook : pieceNum.black | pieceNum.rook;
+				else if (move.HasFlag(Move.PromoteToBishopFlag))
+					promotionPiece = state.IsWhiteTurn ? pieceNum.white | pieceNum.bishop : pieceNum.black | pieceNum.bishop;
+				else if (move.HasFlag(Move.PromoteToKnightFlag))
+					promotionPiece = state.IsWhiteTurn ? pieceNum.white | pieceNum.knight : pieceNum.black | pieceNum.knight;
+				
+				// 디버그 로그 추가
+				Debug.Log($"MoveGenerator에서 프로모션: 기물 값: {promotionPiece}");
+				
+				// 프로모션 적용
+				if (promotionPiece != 0) {
+					state.ClearSquare(toSquare); // 폰 제거
+					state.PlacePiece(toSquare, promotionPiece);
+				}
+			}
+			
+			// 차례 변경
+			state.SwitchTurn();
+		}
+
+		void Init()
 		{
 			// Reset state
 			currMoveIndex = 0;
@@ -111,27 +333,54 @@ public class MoveGenerator
 				if (pawnIndex == -1) break;
 				Coord fromCoord = new Coord(pawnIndex);
 				ulong currentPawn = BitHelper.SetBit(pawnIndex);
-				pawnBitboard &= ~currentPawn; // 현재 폰 비트 제거
+				pawnBitboard = DeleteBit(pawnBitboard, pawnIndex);
 
 				// 일반 전진 이동
 				ulong pawnMovesBitboard = (isWhite ? ChessCache.WhitePawnMoves[pawnIndex] : ChessCache.BlackPawnMoves[pawnIndex]) & ~friendlyPieces;
 				if (pawnMovesBitboard != 0)
 				{
 					int toIndex = BitHelper.BitScanForward(pawnMovesBitboard);
-					if(( allPieces & BitHelper.SetBit(toIndex)) != 0){
-						isBlocked = true;
-						break;
-						}
-					if (toIndex != -1)
+					if(( allPieces & BitHelper.SetBit(toIndex)) != 0)
 					{
-
+						isBlocked = true;
+					}
+					else if (toIndex != -1)
+					{
 						Coord toCoord = new Coord(toIndex);
-						moves.Add(new Move(fromCoord, toCoord));
-						pawnMovesBitboard &= ~BitHelper.SetBit(toIndex);
-						count++;
+						
+						// 프로모션 처리
+						if ((isWhite && toCoord.rankIndex == 7) || (!isWhite && toCoord.rankIndex == 0))
+						{
+							// 프로모션 플래그에 따라 다양한 프로모션 추가
+							if (promotionsToGenerate == PromotionMode.All)
+							{
+								moves.Add(new Move(fromCoord, toCoord, Move.PromoteToQueenFlag));
+								moves.Add(new Move(fromCoord, toCoord, Move.PromoteToRookFlag));
+								moves.Add(new Move(fromCoord, toCoord, Move.PromoteToBishopFlag));
+								moves.Add(new Move(fromCoord, toCoord, Move.PromoteToKnightFlag));
+								count += 4;
+							}
+							else if (promotionsToGenerate == PromotionMode.QueenOnly)
+							{
+								moves.Add(new Move(fromCoord, toCoord, Move.PromoteToQueenFlag));
+								count++;
+							}
+							else if (promotionsToGenerate == PromotionMode.QueenAndKnight)
+							{
+								moves.Add(new Move(fromCoord, toCoord, Move.PromoteToQueenFlag));
+								moves.Add(new Move(fromCoord, toCoord, Move.PromoteToKnightFlag));
+								count += 2;
+							}
+						}
+						else
+						{
+							// 일반 이동
+							moves.Add(new Move(fromCoord, toCoord, Move.NoFlag));
+							pawnMovesBitboard = DeleteBit(pawnMovesBitboard, toIndex);
+							count++;
+						}
 					}
 				}
-
 
 				// 캡처 이동
 				ulong captureMask = isWhite ? ChessCache.WhitePawnCaptureMasks[pawnIndex] : ChessCache.BlackPawnCaptureMasks[pawnIndex];
@@ -142,33 +391,91 @@ public class MoveGenerator
 					int toIndex = BitHelper.BitScanForward(captureTargets);
 					if (toIndex == -1) break;
 					Coord toCoord = new Coord(toIndex);
-					moves.Add(new Move(fromCoord, toCoord, Move.MoveFlag.Capture));
-					captureTargets &= captureTargets - 1;
-					count++;
+					
+					// 프로모션 캡처 처리
+					if ((isWhite && toCoord.rankIndex == 7) || (!isWhite && toCoord.rankIndex == 0))
+					{
+						if (promotionsToGenerate == PromotionMode.All)
+						{
+							moves.Add(new Move(fromCoord, toCoord, Move.PromoteToQueenFlag));
+							moves.Add(new Move(fromCoord, toCoord, Move.PromoteToRookFlag));
+							moves.Add(new Move(fromCoord, toCoord, Move.PromoteToBishopFlag));
+							moves.Add(new Move(fromCoord, toCoord, Move.PromoteToKnightFlag));
+							count += 4;
+						}
+						else if (promotionsToGenerate == PromotionMode.QueenOnly)
+						{
+							moves.Add(new Move(fromCoord, toCoord, Move.PromoteToQueenFlag));
+							count++;
+						}
+						else if (promotionsToGenerate == PromotionMode.QueenAndKnight)
+						{
+							moves.Add(new Move(fromCoord, toCoord, Move.PromoteToQueenFlag));
+							moves.Add(new Move(fromCoord, toCoord, Move.PromoteToKnightFlag));
+							count += 2;
+						}
+					}
+					else
+					{
+						moves.Add(new Move(fromCoord, toCoord, Move.CaptureFlag));
+						count++;
+					}
+					
+					captureTargets = DeleteBit(captureTargets, toIndex);
 				}
 
-				if(isBlocked) continue;
-								// 더블 폰 이동
+				// 더블 폰 이동
+				if(isBlocked) {isBlocked = false; continue;};
 				if ((currentPawn & (isWhite ? ChessCache.WhitePawnStartRank : ChessCache.BlackPawnStartRank)) != 0)
 				{
-					ulong doublePawnMoves = (isWhite ? ChessCache.WhitePawnDoubleMoves[pawnIndex] : ChessCache.BlackPawnDoubleMoves[pawnIndex]) & ~friendlyPieces;
-					if (doublePawnMoves != 0)
+					// 먼저 한 칸 앞이 비어 있는지 확인
+					int oneStepIndex = isWhite ? pawnIndex + 8 : pawnIndex - 8;
+					if (oneStepIndex >= 0 && oneStepIndex < 64 && (allPieces & (1UL << oneStepIndex)) == 0)
 					{
-						int toIndex = BitHelper.BitScanForward(doublePawnMoves);
-						if (toIndex != -1)
+						ulong doublePawnMoves = (isWhite ? ChessCache.WhitePawnDoubleMoves[pawnIndex] : ChessCache.BlackPawnDoubleMoves[pawnIndex]) & ~friendlyPieces;
+						if (doublePawnMoves != 0)
 						{
-							Coord toCoord = new Coord(toIndex);
-							moves.Add(new Move(fromCoord, toCoord, Move.MoveFlag.PawnTwoForward));
-							doublePawnMoves &= ~BitHelper.SetBit(toIndex);
-							count++;
+							int toIndex = BitHelper.BitScanForward(doublePawnMoves);
+							if(( allPieces & BitHelper.SetBit(toIndex)) == 0  && toIndex != -1)
+							{
+								Coord toCoord = new Coord(toIndex);
+								moves.Add(new Move(fromCoord, toCoord, Move.PawnTwoUpFlag));
+								doublePawnMoves = DeleteBit(doublePawnMoves, toIndex);
+								count++;
+							}
 						}
 					}
 				}
 
+				//  앙파상 처리
+				if (board.EnPassantTargetSquare != -1)
+				{
+					// 현재 폰의 위치에서 앙파상 캡처가 가능한지 확인
+					ulong epSquareBit = BitHelper.SetBit(board.EnPassantTargetSquare);
+					
+					// 앙파상 캡처가 가능하려면 대각선으로 이동 가능해야 함
+					bool canCaptureEP = (isWhite ? 
+						(ChessCache.WhitePawnCaptureMasks[pawnIndex] & epSquareBit) != 0 :
+						(ChessCache.BlackPawnCaptureMasks[pawnIndex] & epSquareBit) != 0);
+					
+					if (canCaptureEP)
+					{
+						Coord toCoord = new Coord(board.EnPassantTargetSquare);
+						moves.Add(new Move(fromCoord, toCoord, Move.EnPassantCaptureFlag));
+						count++;
+					}
+				}
 			}
 			return count;
 		}
-		int GenerateKnightMoves(ChessGameState board, List<Move> moves, bool isWhite)
+
+    private static ulong DeleteBit(ulong pawnMovesBitboard, int toIndex)
+    {
+        pawnMovesBitboard &= ~BitHelper.SetBit(toIndex);
+        return pawnMovesBitboard;
+    }
+
+    int GenerateKnightMoves(ChessGameState board, List<Move> moves, bool isWhite)
 		{
 			int count = 0;
 			ulong knightBitboard = board.BitBoards[isWhite ? ChessGameState.WHITE_KNIGHT : ChessGameState.BLACK_KNIGHT];
@@ -179,7 +486,7 @@ public class MoveGenerator
 			{
 				int knightIndex = BitHelper.BitScanForward(knightBitboard);
 				if (knightIndex == -1) break;
-				knightBitboard &= ~BitHelper.SetBit(knightIndex);
+				knightBitboard = DeleteBit(knightBitboard, knightIndex);
 				Coord fromCoord = new Coord(knightIndex);
 				ulong knightMoves = ChessCache.KnightMoves[knightIndex];
 				ulong emptySquares = knightMoves & ~board.AllPieces;
@@ -191,8 +498,8 @@ public class MoveGenerator
 					int toIndex = BitHelper.BitScanForward(emptySquares);
 					if (toIndex == -1) break;
 					Coord toCoord = new Coord(toIndex);
-					moves.Add(new Move(fromCoord, toCoord));
-					emptySquares &= ~BitHelper.SetBit(toIndex);
+					moves.Add(new Move(fromCoord, toCoord, Move.NoFlag));
+					emptySquares = DeleteBit(emptySquares, toIndex);
 					count++;
 				}
 
@@ -202,8 +509,8 @@ public class MoveGenerator
 					int toIndex = BitHelper.BitScanForward(captureSquares);
 					if (toIndex == -1) break;
 					Coord toCoord = new Coord(toIndex);
-					moves.Add(new Move(fromCoord, toCoord, Move.MoveFlag.Capture));
-					captureSquares &= ~BitHelper.SetBit(toIndex);
+					moves.Add(new Move(fromCoord, toCoord, Move.CaptureFlag));
+					captureSquares = DeleteBit(captureSquares, toIndex);
 					count++;
 				}
 			}
@@ -254,7 +561,7 @@ public class MoveGenerator
 							if ((enemyPieces & squareBit) != 0)
 							{
 								Coord toCoord = new Coord(targetSquare);
-								moves.Add(new Move(fromCoord, toCoord, Move.MoveFlag.Capture));
+								moves.Add(new Move(fromCoord, toCoord, Move.CaptureFlag));
 								count++;
 							}
 							// 이 방향의 이동 종료 (아군이든 적군이든 더 이상 진행 불가)
@@ -264,7 +571,7 @@ public class MoveGenerator
 						{
 							// 빈 칸이면 이동 가능
 							Coord toCoord = new Coord(targetSquare);
-							moves.Add(new Move(fromCoord, toCoord));
+							moves.Add(new Move(fromCoord, toCoord, Move.NoFlag));
 							count++;
 						}
 					}
@@ -316,7 +623,7 @@ public class MoveGenerator
 							if ((enemyPieces & squareBit) != 0)
 							{
 								Coord toCoord = new Coord(targetSquare);
-								moves.Add(new Move(fromCoord, toCoord, Move.MoveFlag.Capture));
+								moves.Add(new Move(fromCoord, toCoord, Move.CaptureFlag));
 								count++;
 							}
 							// 이 방향의 이동 종료 (아군이든 적군이든 더 이상 진행 불가)
@@ -326,7 +633,7 @@ public class MoveGenerator
 						{
 							// 빈 칸이면 이동 가능
 							Coord toCoord = new Coord(targetSquare);
-							moves.Add(new Move(fromCoord, toCoord));
+							moves.Add(new Move(fromCoord, toCoord, Move.NoFlag));
 							count++;
 						}
 					}
@@ -378,7 +685,7 @@ public class MoveGenerator
 							if ((enemyPieces & squareBit) != 0)
 							{
 								Coord toCoord = new Coord(targetSquare);
-								moves.Add(new Move(fromCoord, toCoord, Move.MoveFlag.Capture));
+								moves.Add(new Move(fromCoord, toCoord, Move.CaptureFlag));
 								count++;
 							}
 							// 이 방향의 이동 종료 (아군이든 적군이든 더 이상 진행 불가)
@@ -388,7 +695,7 @@ public class MoveGenerator
 						{
 							// 빈 칸이면 이동 가능
 							Coord toCoord = new Coord(targetSquare);
-							moves.Add(new Move(fromCoord, toCoord));
+							moves.Add(new Move(fromCoord, toCoord, Move.NoFlag));
 							count++;
 						}
 					}
@@ -417,15 +724,106 @@ public class MoveGenerator
 				
 				if ((enemyPieces & (1UL << toIndex)) != 0)
 				{
-					moves.Add(new Move(fromCoord, toCoord, Move.MoveFlag.Capture));
+					moves.Add(new Move(fromCoord, toCoord, Move.CaptureFlag));
 					count++;
 				}
 				else if ((board.AllPieces & (1UL << toIndex)) == 0)
 				{
-					moves.Add(new Move(fromCoord, toCoord));
+					moves.Add(new Move(fromCoord, toCoord, Move.NoFlag));
 					count++;
 				}
 			}
+			
+			// 캐슬링 이동 생성
+			GenerateCastlingMoves(board, moves, isWhite, ref count);
+			
 			return count;
 		}
+		
+		// 캐슬링 이동 생성
+		private void GenerateCastlingMoves(ChessGameState board, List<Move> moves, bool isWhite, ref int count)
+		{
+			// 체크 상태에서는 캐슬링 불가
+			if (board.IsInCheck(isWhite))
+			{
+				return;
+			}
+
+			
+			// 킹의 위치
+			int kingSquare = isWhite ? board.WhiteKingSquare : board.BlackKingSquare;
+			
+			// 킹 사이드 캐슬링
+			if (CanKingSideCastle(board, isWhite))
+			{
+				// 킹이 지나는 경로
+				int pathSquare1 = isWhite ? 5 : 61; // f1 또는 f8
+				int pathSquare2 = isWhite ? 6 : 62; // g1 또는 g8
+				ulong enemyAttacks = isWhite ? board.blackAttackMap : board.whiteAttackMap;
+				
+				// 킹이 지나는 길에 적의 공격이 없는지 확인
+				bool pathClear = ((enemyAttacks & (1UL << pathSquare1)) == 0) && 
+								 ((enemyAttacks & (1UL << pathSquare2)) == 0);
+				
+				if (pathClear)
+				{
+					Coord fromCoord = new Coord(kingSquare);
+					Coord toCoord = new Coord(pathSquare2);
+					moves.Add(new Move(fromCoord, toCoord, Move.KingSideCastleFlag));
+					count++;
+				}
+			}
+			
+			// 퀸 사이드 캐슬링
+			if (CanQueenSideCastle(board, isWhite))
+			{
+				// 킹이 지나는 경로
+				int pathSquare1 = isWhite ? 3 : 59; // d1 또는 d8
+				int pathSquare2 = isWhite ? 2 : 58; // c1 또는 c8
+				ulong enemyAttacks = isWhite ? board.blackAttackMap : board.whiteAttackMap;
+				
+				// 킹이 지나는 길에 적의 공격이 없는지 확인
+				bool pathClear = ((enemyAttacks & (1UL << pathSquare1)) == 0) && 
+								 ((enemyAttacks & (1UL << pathSquare2)) == 0);
+				
+				if (pathClear)
+				{
+					Coord fromCoord = new Coord(kingSquare);
+					Coord toCoord = new Coord(pathSquare2);
+					moves.Add(new Move(fromCoord, toCoord, Move.QueenSideCastleFlag));
+					count++;
+				}
+			}
+		}
+		
+		// 킹 사이드 캐슬링 가능 여부
+		private bool CanKingSideCastle(ChessGameState board, bool isWhite)
+		{
+			// 캐슬링 권한 확인
+			if (isWhite && !board.WhiteKingSideCastleRight) return false;
+			if (!isWhite && !board.BlackKingSideCastleRight) return false;
+			
+			// 경로 상의 기물 확인
+			ulong castlePath = isWhite ? ChessCache.WhiteKingSideCastlePath : ChessCache.BlackKingSideCastlePath;
+			
+			// 경로가 비어있어야 함 (킹과 룩 위치 제외)
+			ulong pathOccupancy = board.AllPieces & castlePath;
+			return pathOccupancy == 0;
+		}
+		
+		// 퀸 사이드 캐슬링 가능 여부
+		private bool CanQueenSideCastle(ChessGameState board, bool isWhite)
+		{
+			// 캐슬링 권한 확인
+			if (isWhite && !board.WhiteQueenSideCastleRight) return false;
+			if (!isWhite && !board.BlackQueenSideCastleRight) return false;
+			
+			// 경로 상의 기물 확인
+			ulong castlePath = isWhite ? ChessCache.WhiteQueenSideCastlePath : ChessCache.BlackQueenSideCastlePath;
+			
+			// 경로가 비어있어야 함 (킹과 룩 위치 제외)
+			ulong pathOccupancy = board.AllPieces & castlePath;
+			return pathOccupancy == 0;
+		}
+
 }

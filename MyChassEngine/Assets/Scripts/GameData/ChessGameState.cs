@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using UnityEngine;
 
 [Serializable]
@@ -15,7 +16,7 @@ public class ChessGameState
     
     // 모든 기물의 비트보드
     public ulong AllPieces => WhitePieces | BlackPieces;
-    
+
     // 기물 인덱스 상수
     public const int WHITE_PAWN = 0;
     public const int WHITE_KNIGHT = 1;
@@ -75,15 +76,56 @@ public class ChessGameState
     // 비트 8-13은 잡힌 기물 정보
     // 비트 14-...는 50수 규칙 카운터
     public Stack<uint> MoveHistory = new Stack<uint>();
-    
+
     // 킹 위치 캐시 (체크/체크메이트 빠른 확인용)
     private int whiteKingSquare = 4;
     private int blackKingSquare = 60;
-    
+
     // 캐시된 킹 위치 접근자
     public int WhiteKingSquare => whiteKingSquare;
     public int BlackKingSquare => blackKingSquare;
-    
+
+    // 공격 비트보드 (각 색상의 모든 기물이 공격하는 위치)
+    private ulong WhiteAttackMap = 0UL; // 흰색 기물의 공격 비트보드
+    public ulong whiteAttackMap { get { return WhiteAttackMap; } set { WhiteAttackMap = value; } }
+
+    private ulong BlackAttackMap = 0UL; // 검은색 기물의 공격 비트보드
+    public ulong blackAttackMap { get { return BlackAttackMap; } set { BlackAttackMap = value; } }
+
+    //기물별 공격 비트보드
+    private ulong WhitePawnAttackMap = 0UL;
+    public ulong whitePawnAttackMap { get { return WhitePawnAttackMap; } set { WhitePawnAttackMap = value; } }
+    private ulong BlackPawnAttackMap = 0UL;
+    public ulong blackPawnAttackMap { get { return BlackPawnAttackMap; } set { BlackPawnAttackMap = value; } }
+    private ulong WhiteKnightAttackMap = 0UL;
+    public ulong whiteKnightAttackMap { get { return WhiteKnightAttackMap; } set { WhiteKnightAttackMap = value; } }
+    private ulong BlackKnightAttackMap = 0UL;
+    public ulong blackKnightAttackMap { get { return BlackKnightAttackMap; } set { BlackKnightAttackMap = value; } }
+    private ulong WhiteBishopAttackMap = 0UL;
+    public ulong whiteBishopAttackMap { get { return WhiteBishopAttackMap; } set { WhiteBishopAttackMap = value; } }
+    private ulong BlackBishopAttackMap = 0UL;
+    public ulong blackBishopAttackMap { get { return BlackBishopAttackMap; } set { BlackBishopAttackMap = value; } }
+    private ulong WhiteRookAttackMap = 0UL;
+    public ulong whiteRookAttackMap { get { return WhiteRookAttackMap; } set { WhiteRookAttackMap = value; } }
+    private ulong BlackRookAttackMap = 0UL;
+    public ulong blackRookAttackMap { get { return BlackRookAttackMap; } set { BlackRookAttackMap = value; } }
+    private ulong WhiteQueenAttackMap = 0UL;
+    public ulong whiteQueenAttackMap { get { return WhiteQueenAttackMap; } set { WhiteQueenAttackMap = value; } }
+    private ulong BlackQueenAttackMap = 0UL;
+    public ulong blackQueenAttackMap { get { return BlackQueenAttackMap; } set { BlackQueenAttackMap = value; } }
+    private ulong WhiteKingAttackMap = 0UL;
+    public ulong whiteKingAttackMap { get { return WhiteKingAttackMap; } set { WhiteKingAttackMap = value; } }
+    private ulong BlackKingAttackMap = 0UL;
+    public ulong blackKingAttackMap { get { return BlackKingAttackMap; } set { BlackKingAttackMap = value; } }
+
+    // 핀 관련 비트보드
+    public ulong PinnedPieces = 0UL;        // 핀된 모든 기물
+    public ulong PinnedMovesMask = 0UL;     // 핀된 기물이 이동할 수 있는 방향 마스크
+
+    // 체크 관련 비트보드
+    private ulong CheckingPieces  = 0UL;      // 체크를 가하는 기물
+    public ulong checkingPieces => CheckingPieces; // 체크를 가하는 기물이 이동할 수 있는 방향 마스크
+    private ulong CheckBlockingMask =0UL;   // 체크를 방어할 수 있는 위치 마스크
 
     public void SwitchTurn(){
         IsWhiteTurn = !IsWhiteTurn;
@@ -265,7 +307,7 @@ public class ChessGameState
     }
     
     // 보드 배열에서 비트보드 업데이트
-    private void UpdateBitboardsFromBoard(int[] boardArray)
+    public void UpdateBitboardsFromBoard(int[] boardArray)
     {
         // 비트보드 초기화
         for (int i = 0; i < 12; i++)
@@ -298,7 +340,16 @@ public class ChessGameState
             }
         }
     }
+    public void UpdateBitboardsFromBitboards(ulong[] bitboards)
+    {
+        for (int i = 0; i < 12; i++)
+        {
+            BitBoards[i] = bitboards[i];
+        }
+
+    }
     
+
     // 비트보드에서 보드 배열 업데이트
     private void UpdateBoardFromBitboards()
     {
@@ -379,6 +430,12 @@ public class ChessGameState
         {
             blackKingSquare = toSquare;
         }
+        
+        // 앙파상 타겟 초기화 (폰 두 칸 이동이 아닌 경우)
+        if (EnPassantTargetSquare != -1 && toSquare != EnPassantTargetSquare)
+        {
+            EnPassantTargetSquare = -1;
+        }
     }
     
     // 기물 배치
@@ -455,13 +512,8 @@ public class ChessGameState
     // 체크 상태인지 확인
     public bool IsInCheck(bool whiteKing)
     {
-        // 체크 검사 로직 구현
         int kingSquare = whiteKing ? whiteKingSquare : blackKingSquare;
-        if (kingSquare < 0) return false;
-        
-        // TODO: 여기에 체크 검사 로직 추가
-        
-        return false;
+        return IsSquareAttacked(kingSquare, !whiteKing);
     }
 
     // 기본 생성자
@@ -507,7 +559,611 @@ public class ChessGameState
         // 킹 위치 초기화
         whiteKingSquare = -1;
         blackKingSquare = -1;
+
+    }
+
+    // 공격 맵 업데이트 메서드
+    public void UpdateAttackMaps()
+    {
+        // 공격 맵 초기화
+        WhiteAttackMap = 0UL;
+        BlackAttackMap = 0UL;
         
-        Debug.Log("ChessGameState 초기화 완료");
+        // 각 기물별 공격 맵 초기화
+        WhitePawnAttackMap = 0UL;
+        BlackPawnAttackMap = 0UL;
+        WhiteKnightAttackMap = 0UL;
+        BlackKnightAttackMap = 0UL;
+        WhiteBishopAttackMap = 0UL;
+        BlackBishopAttackMap = 0UL;
+        WhiteRookAttackMap = 0UL;
+        BlackRookAttackMap = 0UL;
+        WhiteQueenAttackMap = 0UL;
+        BlackQueenAttackMap = 0UL;
+        WhiteKingAttackMap = 0UL;
+        BlackKingAttackMap = 0UL;
+        
+        // 폰 공격 맵 계산
+        CalculatePawnAttacks();
+        
+        // 나이트 공격 맵 계산
+        CalculateKnightAttacks();
+        
+        // 킹 공격 맵 계산 (킹 위치가 유효한지 확인)
+        if (whiteKingSquare >= 0 && whiteKingSquare < 64) {
+            WhiteKingAttackMap = ChessCache.KingMoves[whiteKingSquare];
+        }
+        if (blackKingSquare >= 0 && blackKingSquare < 64) {
+            BlackKingAttackMap = ChessCache.KingMoves[blackKingSquare];
+        }
+        
+        // 슬라이딩 공격 맵 계산 (비숍, 룩, 퀸)
+        // 비숍 공격 계산
+        CalculateSlidingAttacks(WHITE_BISHOP, WHITE_QUEEN, true);
+        CalculateSlidingAttacks(BLACK_BISHOP, BLACK_QUEEN, false);
+        
+        // 룩 공격 계산
+        CalculateSlidingAttacks(WHITE_ROOK, WHITE_QUEEN, true);
+        CalculateSlidingAttacks(BLACK_ROOK, BLACK_QUEEN, false);
+        
+        // 모든 공격 맵 통합
+        WhiteAttackMap = WhitePawnAttackMap | WhiteKnightAttackMap | WhiteBishopAttackMap | 
+                         WhiteRookAttackMap | WhiteQueenAttackMap | WhiteKingAttackMap;
+                         
+        BlackAttackMap = BlackPawnAttackMap | BlackKnightAttackMap | BlackBishopAttackMap | 
+                         BlackRookAttackMap | BlackQueenAttackMap | BlackKingAttackMap;
+        
+        // 디버그 로깅
+        //DebugAttackMaps();
+    }
+    
+    // 폰 공격 맵 계산
+    private void CalculatePawnAttacks()
+    {
+        // 백색 폰 공격 맵
+        ulong whitePawns = BitBoards[WHITE_PAWN];
+        while (whitePawns != 0)
+        {
+            int pawnSquare = BitHelper.GetLSBIndex(whitePawns);
+            whitePawns = BitHelper.ClearBit(whitePawns, pawnSquare);
+            
+            // 폰의 공격 위치 계산 (좌상단, 우상단 대각선)
+            if (pawnSquare < 56) // 마지막 랭크가 아닌 경우만
+            {
+                // 좌상단 대각선 (파일이 0이 아닌 경우)
+                if (pawnSquare % 8 > 0)
+                {
+                    WhitePawnAttackMap |= BitHelper.SetBit(pawnSquare + 7);
+                }
+                
+                // 우상단 대각선 (파일이 7이 아닌 경우)
+                if (pawnSquare % 8 < 7)
+                {
+                    WhitePawnAttackMap |= BitHelper.SetBit(pawnSquare + 9);
+                }
+            }
+        }
+        
+        // 흑색 폰 공격 맵
+        ulong blackPawns = BitBoards[BLACK_PAWN];
+        while (blackPawns != 0)
+        {
+            int pawnSquare = BitHelper.GetLSBIndex(blackPawns);
+            blackPawns = BitHelper.ClearBit(blackPawns, pawnSquare);
+            
+            // 폰의 공격 위치 계산 (좌하단, 우하단 대각선)
+            if (pawnSquare > 7) // 첫 랭크가 아닌 경우만
+            {
+                // 좌하단 대각선 (파일이 0이 아닌 경우)
+                if (pawnSquare % 8 > 0)
+                {
+                    BlackPawnAttackMap |= BitHelper.SetBit(pawnSquare - 9);
+                }
+                
+                // 우하단 대각선 (파일이 7이 아닌 경우)
+                if (pawnSquare % 8 < 7)
+                {
+                    BlackPawnAttackMap |= BitHelper.SetBit(pawnSquare - 7);
+                }
+            }
+        }
+    }
+    
+    // 나이트 공격 맵 계산
+    private void CalculateKnightAttacks()
+    {
+        // 백색 나이트 공격 맵
+        ulong whiteKnights = BitBoards[WHITE_KNIGHT];
+        while (whiteKnights != 0)
+        {
+            int knightSquare = BitHelper.GetLSBIndex(whiteKnights);
+            whiteKnights = BitHelper.ClearBit(whiteKnights, knightSquare);
+            
+            ulong attacks = ChessCache.KnightMoves[knightSquare];
+            WhiteKnightAttackMap |= attacks;
+        }
+        
+        // 흑색 나이트 공격 맵
+        ulong blackKnights = BitBoards[BLACK_KNIGHT];
+        while (blackKnights != 0)
+        {
+            int knightSquare = BitHelper.GetLSBIndex(blackKnights);
+            blackKnights = BitHelper.ClearBit(blackKnights, knightSquare);
+            
+            ulong attacks = ChessCache.KnightMoves[knightSquare];
+            BlackKnightAttackMap |= attacks;
+        }
+    }
+    
+    // 디버그용 공격 맵 정보 출력
+    private void DebugAttackMaps()
+    {
+        // 퀸 공격 맵 디버깅
+        ulong whiteQueens = BitBoards[WHITE_QUEEN];
+        ulong blackQueens = BitBoards[BLACK_QUEEN];
+        
+        if (whiteQueens != 0 || blackQueens != 0)
+        {
+            Debug.Log("===== 퀸 위치와 공격 맵 =====");
+            if (whiteQueens != 0)
+            {
+                Debug.Log($"백색 퀸 비트보드: {BitHelper.BitboardToString(whiteQueens)}");
+                Debug.Log($"백색 퀸 공격 맵: {BitHelper.BitboardToString(WhiteQueenAttackMap)}");
+            }
+            if (blackQueens != 0)
+            {
+                Debug.Log($"흑색 퀸 비트보드: {BitHelper.BitboardToString(blackQueens)}");
+                Debug.Log($"흑색 퀸 공격 맵: {BitHelper.BitboardToString(BlackQueenAttackMap)}");
+            }
+        }
+        
+        // 기타 공격 맵 요약 정보
+        Debug.Log("===== 공격 맵 비트 수 =====");
+        Debug.Log($"백색 폰 공격: {BitHelper.CountBits(WhitePawnAttackMap)}");
+        Debug.Log($"흑색 폰 공격: {BitHelper.CountBits(BlackPawnAttackMap)}");
+        Debug.Log($"백색 나이트 공격: {BitHelper.CountBits(WhiteKnightAttackMap)}");
+        Debug.Log($"흑색 나이트 공격: {BitHelper.CountBits(BlackKnightAttackMap)}");
+        Debug.Log($"백색 비숍 공격: {BitHelper.CountBits(WhiteBishopAttackMap)}");
+        Debug.Log($"흑색 비숍 공격: {BitHelper.CountBits(BlackBishopAttackMap)}");
+        Debug.Log($"백색 룩 공격: {BitHelper.CountBits(WhiteRookAttackMap)}");
+        Debug.Log($"흑색 룩 공격: {BitHelper.CountBits(BlackRookAttackMap)}");
+        Debug.Log($"백색 퀸 공격: {BitHelper.CountBits(WhiteQueenAttackMap)}");
+        Debug.Log($"흑색 퀸 공격: {BitHelper.CountBits(BlackQueenAttackMap)}");
+        Debug.Log($"백색 킹 공격: {BitHelper.CountBits(WhiteKingAttackMap)}");
+        Debug.Log($"흑색 킹 공격: {BitHelper.CountBits(BlackKingAttackMap)}");
+    }
+    // 공격 맵 강제 업데이트 메서드 추가
+    public void ForceUpdateAttackMaps()
+    {
+
+        WhiteAttackMap = 0UL;
+        BlackAttackMap = 0UL;
+        WhitePawnAttackMap = 0UL;
+        BlackPawnAttackMap = 0UL;
+        WhiteKnightAttackMap = 0UL;
+        BlackKnightAttackMap = 0UL;
+        WhiteBishopAttackMap = 0UL;
+        BlackBishopAttackMap = 0UL;
+        WhiteRookAttackMap = 0UL;
+        BlackRookAttackMap = 0UL;
+        WhiteQueenAttackMap = 0UL;
+        BlackQueenAttackMap = 0UL;
+        WhiteKingAttackMap = 0UL;
+        BlackKingAttackMap = 0UL;
+        UpdateAttackMaps();
+        UpdatePinInformation();
+        UpdateCheckInformation();
+    }
+    // 슬라이딩 공격 계산 (비숍, 룩, 퀸 등)
+    private void CalculateSlidingAttacks(int pieceTypeIndex, int queenIndex, bool isWhite)
+    {
+        ulong pieces = BitBoards[pieceTypeIndex];
+        bool isBishop = (pieceTypeIndex == WHITE_BISHOP || pieceTypeIndex == BLACK_BISHOP);
+        bool isRook = (pieceTypeIndex == WHITE_ROOK || pieceTypeIndex == BLACK_ROOK);
+        
+        // 각 기물에 대한 공격 맵 계산
+        while (pieces != 0)
+        {
+            int pieceSquare = BitHelper.GetLSBIndex(pieces);
+            pieces = BitHelper.ClearBit(pieces, pieceSquare);
+            
+            ulong attacks = 0UL;
+            
+            // 비숍 또는 퀸의 대각선 공격 계산
+            if (isBishop)
+            {
+                for (int dir = 0; dir < 4; dir++)
+                {
+                    ulong[] dirPath = ChessCache.GetBishopDirectionPath(pieceSquare, dir);
+                    if (dirPath == null || dirPath.Length == 0) continue;
+                    
+                    for (int i = 0; i < dirPath.Length; i++)
+                    {
+                        ulong squareBit = dirPath[i];
+                        attacks |= squareBit;
+                        
+                        // 기물이 있으면 그 위치까지만 공격 가능
+                        if ((AllPieces & squareBit) != 0)
+                            break;
+                    }
+                }
+            }
+            // 룩 또는 퀸의 직선 공격 계산
+            else if (isRook)
+            {
+                for (int dir = 0; dir < 4; dir++)
+                {
+                    ulong[] dirPath = ChessCache.GetRookDirectionPath(pieceSquare, dir);
+                    if (dirPath == null || dirPath.Length == 0) continue;
+                    
+                    for (int i = 0; i < dirPath.Length; i++)
+                    {
+                        ulong squareBit = dirPath[i];
+                        attacks |= squareBit;
+                        
+                        // 기물이 있으면 그 위치까지만 공격 가능
+                        if ((AllPieces & squareBit) != 0)
+                            break;
+                    }
+                }
+            }
+            if(isBishop && isWhite)
+            {
+                WhiteBishopAttackMap |= attacks;
+            }
+            else if (isBishop && !isWhite)
+            {
+                BlackBishopAttackMap |= attacks;
+            }
+            else if (isRook && isWhite)
+            {
+                WhiteRookAttackMap |= attacks;
+            }
+            else if (isRook && !isWhite)
+            {
+                BlackRookAttackMap |= attacks;
+            }
+
+        }
+        
+        // 퀸 공격 맵 별도 계산 (퀸은 비숍과 룩의 이동 조합)
+        ulong queens = BitBoards[queenIndex];
+        while (queens != 0)
+        {
+            int queenSquare = BitHelper.GetLSBIndex(queens);
+            queens = BitHelper.ClearBit(queens, queenSquare);
+            
+            ulong attacks = 0UL;
+            
+            // 대각선 이동 (비숍처럼)
+            for (int dir = 0; dir < 4; dir++)
+            {
+                ulong[] dirPath = ChessCache.GetBishopDirectionPath(queenSquare, dir);
+                if (dirPath == null || dirPath.Length == 0) continue;
+                
+                for (int i = 0; i < dirPath.Length; i++)
+                {
+                    ulong squareBit = dirPath[i];
+                    attacks |= squareBit;
+                    
+                    // 기물이 있으면 그 위치까지만 공격 가능
+                    if ((AllPieces & squareBit) != 0)
+                        break;
+                }
+            }
+            
+            // 직선 이동 (룩처럼)
+            for (int dir = 0; dir < 4; dir++)
+            {
+                ulong[] dirPath = ChessCache.GetRookDirectionPath(queenSquare, dir);
+                if (dirPath == null || dirPath.Length == 0) continue;
+                
+                for (int i = 0; i < dirPath.Length; i++)
+                {
+                    ulong squareBit = dirPath[i];
+                    attacks |= squareBit;
+                    
+                    // 기물이 있으면 그 위치까지만 공격 가능
+                    if ((AllPieces & squareBit) != 0)
+                        break;
+                }
+            }
+            if(isWhite)
+            {
+                WhiteQueenAttackMap |= attacks;
+            }
+            else
+            {
+                BlackQueenAttackMap |= attacks;
+            }
+        }
+    }
+    
+    // 핀 감지 및 관련 비트보드 업데이트
+    public void UpdatePinInformation()
+    {
+        PinnedPieces = 0UL;
+        
+        // 현재 차례의 킹 위치
+        int kingSquare = IsWhiteTurn ? whiteKingSquare : blackKingSquare;
+        ulong friendlyPieces = IsWhiteTurn ? WhitePieces : BlackPieces;
+        ulong enemyPieces = IsWhiteTurn ? BlackPieces : WhitePieces;
+        
+        // 비숍/퀸에 의한 핀 (대각선)
+        ulong enemyBishops = BitBoards[IsWhiteTurn ? BLACK_BISHOP : WHITE_BISHOP];
+        ulong enemyQueens = BitBoards[IsWhiteTurn ? BLACK_QUEEN : WHITE_QUEEN];
+        ulong bishopQueens = enemyBishops | enemyQueens;
+        
+        // 각 대각선 방향에 대해
+        for (int dir = 0; dir < 4; dir++)
+        {
+            ulong[] dirPath = ChessCache.GetBishopDirectionPath(kingSquare, dir);
+            if (dirPath == null || dirPath.Length == 0) continue;
+            
+            ulong potentialPin = 0UL;
+            bool foundFriendly = false;
+            
+            for (int i = 0; i < dirPath.Length; i++)
+            {
+                ulong squareBit = dirPath[i];
+                
+                // 아군 기물 발견
+                if ((friendlyPieces & squareBit) != 0)
+                {
+                    if (foundFriendly) // 이미 아군 기물 하나 발견했으면 핀 불가능
+                    {
+                        potentialPin = 0UL;
+                        break;
+                    }
+                    
+                    foundFriendly = true;
+                    potentialPin = squareBit;
+                }
+                // 적 기물 발견
+                else if ((enemyPieces & squareBit) != 0)
+                {
+                    // 핀 가능한 적 슬라이더(비숍/퀸)가 있는지 확인
+                    if (foundFriendly && (bishopQueens & squareBit) != 0)
+                    {
+                        PinnedPieces |= potentialPin;
+                    }
+                    break;
+                }
+            }
+        }
+        
+        // 룩/퀸에 의한 핀 (직선)
+        ulong enemyRooks = BitBoards[IsWhiteTurn ? BLACK_ROOK : WHITE_ROOK];
+        ulong rookQueens = enemyRooks | enemyQueens;
+        
+        // 각 직선 방향에 대해
+        for (int dir = 0; dir < 4; dir++)
+        {
+            ulong[] dirPath = ChessCache.GetRookDirectionPath(kingSquare, dir);
+            if (dirPath == null || dirPath.Length == 0) continue;
+            
+            ulong potentialPin = 0UL;
+            bool foundFriendly = false;
+            
+            for (int i = 0; i < dirPath.Length; i++)
+            {
+                ulong squareBit = dirPath[i];
+                
+                // 아군 기물 발견
+                if ((friendlyPieces & squareBit) != 0)
+                {
+                    if (foundFriendly) // 이미 아군 기물 하나 발견했으면 핀 불가능
+                    {
+                        potentialPin = 0UL;
+                        break;
+                    }
+                    
+                    foundFriendly = true;
+                    potentialPin = squareBit;
+                }
+                // 적 기물 발견
+                else if ((enemyPieces & squareBit) != 0)
+                {
+                    // 핀 가능한 적 슬라이더(룩/퀸)가 있는지 확인
+                    if (foundFriendly && (rookQueens & squareBit) != 0)
+                    {
+                        PinnedPieces |= potentialPin;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    
+    // 체크 상태 감지 및 관련 비트보드 업데이트
+    public void UpdateCheckInformation()
+    {
+        // 초기화
+        CheckingPieces = 0UL;
+        CheckBlockingMask = 0UL;
+        
+        // 현재 차례의 킹 위치
+        int kingSquare = IsWhiteTurn ? whiteKingSquare : blackKingSquare;
+        ulong kingBit = BitHelper.SetBit(kingSquare);
+        
+        // 이 함수 호출 전에 공격 맵이 업데이트되었는지 확인
+        UpdateAttackMaps();
+        
+        // 폰 체크 확인
+        ulong enemyPawns = BitBoards[IsWhiteTurn ? BLACK_PAWN : WHITE_PAWN];
+        ulong pawnAttacks = 0UL;
+        
+        if (IsWhiteTurn) // 백색 킹에 대한 흑색 폰 공격
+        {
+            // 킹의 왼쪽과 오른쪽 위 대각선 위치에 폰이 있는지 확인
+            if (kingSquare % 8 > 0 && kingSquare + 7 < 64) // 왼쪽 위 대각선
+            {
+                if ((enemyPawns & BitHelper.SetBit(kingSquare + 7)) != 0)
+                    pawnAttacks |= BitHelper.SetBit(kingSquare + 7);
+            }
+            if (kingSquare % 8 < 7 && kingSquare + 9 < 64) // 오른쪽 위 대각선
+            {
+                if ((enemyPawns & BitHelper.SetBit(kingSquare + 9)) != 0)
+                    pawnAttacks |= BitHelper.SetBit(kingSquare + 9);
+            }
+        }
+        else // 흑색 킹에 대한 백색 폰 공격
+        {
+            // 킹의 왼쪽과 오른쪽 아래 대각선 위치에 폰이 있는지 확인
+            if (kingSquare % 8 > 0 && kingSquare - 9 >= 0) // 왼쪽 아래 대각선
+            {
+                if ((enemyPawns & BitHelper.SetBit(kingSquare - 9)) != 0)
+                    pawnAttacks |= BitHelper.SetBit(kingSquare - 9);
+            }
+            if (kingSquare % 8 < 7 && kingSquare - 7 >= 0) // 오른쪽 아래 대각선
+            {
+                if ((enemyPawns & BitHelper.SetBit(kingSquare - 7)) != 0)
+                    pawnAttacks |= BitHelper.SetBit(kingSquare - 7);
+            }
+        }
+        
+        if (pawnAttacks != 0)
+        {
+            CheckingPieces |= pawnAttacks;
+            // 폰은 이동 경로가 없으므로 체크 블로킹 마스크에 폰 자체만 추가
+            CheckBlockingMask |= pawnAttacks;
+        }
+        
+        // 나이트 체크 확인
+        ulong enemyKnights = BitBoards[IsWhiteTurn ? BLACK_KNIGHT : WHITE_KNIGHT];
+        ulong knightAttacks = ChessCache.KnightMoves[kingSquare] & enemyKnights;
+        
+        if (knightAttacks != 0)
+        {
+            CheckingPieces |= knightAttacks;
+            // 나이트도 이동 경로가 없으므로 체크 블로킹 마스크에 나이트 자체만 추가
+            CheckBlockingMask |= knightAttacks;
+        }
+        
+        // 슬라이딩 체크 확인 (비숍, 룩, 퀸)
+        ulong enemyBishops = BitBoards[IsWhiteTurn ? BLACK_BISHOP : WHITE_BISHOP];
+        ulong enemyRooks = BitBoards[IsWhiteTurn ? BLACK_ROOK : WHITE_ROOK];
+        ulong enemyQueens = BitBoards[IsWhiteTurn ? BLACK_QUEEN : WHITE_QUEEN];
+        
+        // 비숍/퀸에 의한 체크 (대각선)
+        for (int dir = 0; dir < 4; dir++)
+        {
+            ulong[] dirPath = ChessCache.GetBishopDirectionPath(kingSquare, dir);
+            if (dirPath == null || dirPath.Length == 0) continue;
+            
+            ulong blockingMask = 0UL;
+            bool foundCheck = false;
+            
+            for (int i = 0; i < dirPath.Length; i++)
+            {
+                ulong squareBit = dirPath[i];
+                int squareIndex = BitHelper.BitScanForward(squareBit);
+                
+                // 기물 발견
+                if ((AllPieces & squareBit) != 0)
+                {
+                    // 적 비숍/퀸인 경우 체크
+                    if (((enemyBishops | enemyQueens) & squareBit) != 0)
+                    {
+                        CheckingPieces |= squareBit;
+                        blockingMask |= squareBit; // 공격자 자신을 추가
+                        foundCheck = true;
+                    }
+                    break;
+                }
+                
+                blockingMask |= squareBit;
+            }
+            
+            // 체크가 있을 때만 블로킹 마스크 추가
+            if (foundCheck)
+            {
+                CheckBlockingMask |= blockingMask;
+            }
+        }
+        
+        // 룩/퀸에 의한 체크 (직선)
+        for (int dir = 0; dir < 4; dir++)
+        {
+            ulong[] dirPath = ChessCache.GetRookDirectionPath(kingSquare, dir);
+            if (dirPath == null || dirPath.Length == 0) continue;
+            
+            ulong blockingMask = 0UL;
+            bool foundCheck = false;
+            
+            for (int i = 0; i < dirPath.Length; i++)
+            {
+                ulong squareBit = dirPath[i];
+                int squareIndex = BitHelper.BitScanForward(squareBit);
+                
+                // 기물 발견
+                if ((AllPieces & squareBit) != 0)
+                {
+                    // 적 룩/퀸인 경우 체크
+                    if (((enemyRooks | enemyQueens) & squareBit) != 0)
+                    {
+                        CheckingPieces |= squareBit;
+                        blockingMask |= squareBit; // 공격자 자신을 추가
+                        foundCheck = true;
+                    }
+                    break;
+                }
+                
+                blockingMask |= squareBit;
+            }
+            
+            // 체크가 있을 때만 블로킹 마스크 추가
+            if (foundCheck)
+            {
+                CheckBlockingMask |= blockingMask;
+            }
+        }
+        
+        // 더블 체크 확인 (2개 이상의 기물이 체크하는 경우)
+        bool isDoubleCheck = BitHelper.CountBits(CheckingPieces) > 1;
+        
+        // 더블 체크인 경우 체크 블로킹 마스크 제한
+        // (더블 체크는 킹이 직접 피할 수밖에 없음)
+        if (isDoubleCheck)
+        {
+            CheckBlockingMask = CheckingPieces; // 공격자 기물만 캡처 가능
+        }
+        
+
+    } 
+    
+    // 특정 위치가 공격받고 있는지 확인
+    public bool IsSquareAttacked(int square, bool byWhite)
+    {
+        if (square < 0 || square >= 64) return false;
+        
+        // 항상 최신 공격 맵 데이터로 계산
+        UpdateAttackMaps();
+        
+        ulong squareBit = BitHelper.SetBit(square);
+        
+        if (byWhite)
+        {
+            return (WhiteAttackMap & squareBit) != 0;
+        }
+        else
+        {
+            return (BlackAttackMap & squareBit) != 0;
+        }
+    }
+    // MoveGenerator가 접근할 수 있도록 추가한 메서드들
+    public int GetCheckCount()
+    {
+        return BitHelper.CountBits(CheckingPieces);
+    }
+
+    public ulong GetCheckingPieces()
+    {
+        return CheckingPieces;
+    }
+
+    public ulong GetCheckBlockingMask()
+    {
+        return CheckBlockingMask;
     }
 } 

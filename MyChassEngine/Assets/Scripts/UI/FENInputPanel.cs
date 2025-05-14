@@ -5,7 +5,7 @@ using TMPro;
 public class FENInputPanel : MonoBehaviour
 {
     [Header("참조")]
-    [SerializeField] public ChessManager chessManager;
+    [SerializeField] public BoardManager chessManager;
     [SerializeField] public TMP_InputField fenInputField;
     [SerializeField] public Button applyButton;
     [SerializeField] public Button resetButton;
@@ -22,7 +22,7 @@ public class FENInputPanel : MonoBehaviour
     {
         if (chessManager == null)
         {
-            chessManager = FindObjectOfType<ChessManager>();
+            chessManager = FindObjectOfType<BoardManager>();
         }
         
         // 기본 FEN 문자열로 초기화

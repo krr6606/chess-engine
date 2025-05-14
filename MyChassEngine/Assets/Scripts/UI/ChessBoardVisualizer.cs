@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using TMPro; // TextMeshPro 네임스페이스 추가
 
 public class ChessBoardVisualizer : MonoBehaviour
 {
@@ -15,9 +16,21 @@ public class ChessBoardVisualizer : MonoBehaviour
     [SerializeField] private bool useSquareBoardSize = true;
     [SerializeField] private float squareBoardSize = 8f;
     
+    // 시각화 관련 색상
+    [Header("시각화 색상")]
+    [SerializeField] private Color checkHighlightColor = new Color(1f, 0f, 0f, 0.5f); // 체크 강조 색상
+    [SerializeField] private Color castlingHighlightColor = new Color(0f, 1f, 0f, 0.5f); // 캐슬링 강조 색상
+    [SerializeField] private Color enPassantHighlightColor = new Color(1f, 1f, 0f, 0.5f); // 앙파상 강조 색상
+    [SerializeField] private Color promotionHighlightColor = new Color(0f, 1f, 1f, 0.5f); // 프로모션 강조 색상
+    [SerializeField] private Color pinHighlightColor = new Color(1f, 0.5f, 0f, 0.5f); // 핀 강조 색상
+    [SerializeField] private Color checkBlockingHighlightColor = new Color(0.5f, 0f, 1f, 0.5f); // 체크 블로킹 강조 색상
+    
     // 현재 보드에 표시된 기물들을 관리
     private Dictionary<int, GameObject> pieceGameObjects = new Dictionary<int, GameObject>();
     private List<GameObject> activeAnimations = new List<GameObject>();
+    
+    // 체스판 칸 관리
+    private GameObject[,] squares = new GameObject[8, 8];
     
     private void Awake()
     {
@@ -230,7 +243,6 @@ public class ChessBoardVisualizer : MonoBehaviour
         }
         
         GameObject pieceObj = pieceGameObjects[fromSquare];
-       
         
         // 이동 대상 위치에 기물이 있으면 제거 (이동 전에 실행)
         if (pieceGameObjects.ContainsKey(toSquare))
@@ -262,17 +274,16 @@ public class ChessBoardVisualizer : MonoBehaviour
     }
     
     // 캡처 애니메이션
-    private void StartCaptureAnimation(int square)
+    public void StartCaptureAnimation(int square)
     {
         if (!pieceGameObjects.ContainsKey(square)) return;
         
         GameObject pieceObj = pieceGameObjects[square];
         ChessPiece piece = pieceObj.GetComponent<ChessPiece>();
         pieceGameObjects.Remove(square);
+        
         // 애니메이션 시작
         StartCoroutine(AnimateCapture(pieceObj, piece, captureAnimationDuration));
-    
-
     }
     
     // 기물 이동 애니메이션
@@ -317,6 +328,143 @@ public class ChessBoardVisualizer : MonoBehaviour
         else
         {
             piecePool.ReturnPiece(pieceObj, 0, true); // 기본값 사용
+        }
+    }
+    
+    // 특수 상황 처리 후 시각화 업데이트
+    public void UpdateVisualizationAfterSpecialMove(ChessGameState state)
+    {
+        // 체크 상태 시각화
+        UpdateCheckVisualization(state);
+        
+        // 캐슬링 권한 시각화
+        UpdateCastlingRightsVisualization(state);
+        
+        // 앙파상 타겟 시각화
+        UpdateEnPassantTargetVisualization(state);
+        
+        // 프로모션 대기 상태 시각화
+        UpdatePromotionVisualization(state);
+        
+        // 핀된 기물 시각화
+        UpdatePinnedPiecesVisualization(state);
+        
+        // 체크 블로킹 마스크 시각화
+        UpdateCheckBlockingMaskVisualization(state);
+    }
+
+    // 체크 상태 시각화 업데이트
+    private void UpdateCheckVisualization(ChessGameState state)
+    {
+        if (state.GetCheckingPieces() != 0)
+        {
+            // 체크하는 기물 강조
+            List<int> checkingSquares = BitHelper.GetSetBitIndexes(state.GetCheckingPieces());
+            foreach (int square in checkingSquares)
+            {
+                HighlightSquare(square, checkHighlightColor);
+            }
+            
+            // 체크 상태인 킹 강조
+            int kingSquare = state.IsWhiteTurn ? state.WhiteKingSquare : state.BlackKingSquare;
+            if (kingSquare >= 0)
+            {
+                HighlightSquare(kingSquare, checkHighlightColor);
+            }
+        }
+    }
+
+    // 캐슬링 권한 시각화 업데이트
+    private void UpdateCastlingRightsVisualization(ChessGameState state)
+    {
+        // 백색 킹사이드 캐슬링
+        if (!state.WhiteKingSideCastleRight)
+        {
+            HighlightSquare(7, castlingHighlightColor);
+        }
+        
+        // 백색 퀸사이드 캐슬링
+        if (!state.WhiteQueenSideCastleRight)
+        {
+            HighlightSquare(0, castlingHighlightColor);
+        }
+        
+        // 흑색 킹사이드 캐슬링
+        if (!state.BlackKingSideCastleRight)
+        {
+            HighlightSquare(63, castlingHighlightColor);
+        }
+        
+        // 흑색 퀸사이드 캐슬링
+        if (!state.BlackQueenSideCastleRight)
+        {
+            HighlightSquare(56, castlingHighlightColor);
+        }
+    }
+
+    // 앙파상 타겟 시각화 업데이트
+    private void UpdateEnPassantTargetVisualization(ChessGameState state)
+    {
+        if (state.EnPassantTargetSquare != -1)
+        {
+            HighlightSquare(state.EnPassantTargetSquare, enPassantHighlightColor);
+        }
+    }
+
+    // 프로모션 대기 상태 시각화 업데이트
+    private void UpdatePromotionVisualization(ChessGameState state)
+    {
+        if (state.IsPromotionPending && state.PromotionSquare != -1)
+        {
+            HighlightSquare(state.PromotionSquare, promotionHighlightColor);
+        }
+    }
+
+    // 핀된 기물 시각화 업데이트
+    private void UpdatePinnedPiecesVisualization(ChessGameState state)
+    {
+        if (state.PinnedPieces != 0)
+        {
+            List<int> pinnedSquares = BitHelper.GetSetBitIndexes(state.PinnedPieces);
+            foreach (int square in pinnedSquares)
+            {
+                HighlightSquare(square, pinHighlightColor);
+            }
+        }
+    }
+
+    // 체크 블로킹 마스크 시각화 업데이트
+    private void UpdateCheckBlockingMaskVisualization(ChessGameState state)
+    {
+        if (state.GetCheckBlockingMask() != 0)
+        {
+            List<int> blockingSquares = BitHelper.GetSetBitIndexes(state.GetCheckBlockingMask());
+            foreach (int square in blockingSquares)
+            {
+                HighlightSquare(square, checkBlockingHighlightColor);
+            }
+        }
+    }
+
+    // 특정 위치 강조
+    private void HighlightSquare(int square, Color highlightColor)
+    {
+        if (square < 0 || square >= 64) return;
+        
+        int rank = square / 8;
+        int file = square % 8;
+        
+        if (rank >= 0 && rank < 8 && file >= 0 && file < 8)
+        {
+            GameObject squareObj = squares[rank, file];
+            if (squareObj != null)
+            {
+                Renderer renderer = squareObj.GetComponent<Renderer>();
+                if (renderer != null)
+                {
+                    renderer.material.color = highlightColor;
+                }
+            }
         }
     }
     
@@ -437,7 +585,6 @@ public class ChessBoardVisualizer : MonoBehaviour
     {
         if (!coord.IsValidSquare() || BoardGenerator.Instance == null || BoardGenerator.Instance.tileDict == null)
         {
-            Debug.LogWarning("UnhighlightSquare: 필요한 참조가 없습니다.");
             return;
         }
 
@@ -525,4 +672,270 @@ public class ChessBoardVisualizer : MonoBehaviour
         
         Debug.Log("현재 보드 상태:\n" + boardStr);
     }
+
+    #region 비트보드 시각화
+
+    // 비트보드 오버레이 게임 오브젝트들
+    private Dictionary<int, GameObject> bitboardOverlays = new Dictionary<int, GameObject>();
+    
+    // 비트보드 타입 열거형
+    public enum BitboardType
+    {
+        None,
+        WhiteAttacks,
+        BlackAttacks,
+        WhitePieces,
+        BlackPieces,
+        AllPieces,
+        WhitePawns,
+        BlackPawns,
+        WhiteKnights,
+        BlackKnights,
+        WhiteBishops,
+        BlackBishops,
+        WhiteRooks,
+        BlackRooks,
+        WhiteQueens,
+        BlackQueens,
+        WhiteKing,
+        BlackKing,
+        PinnedPieces,
+        CheckingPieces,
+        CheckBlockingMask,
+        LightSquares,
+        DarkSquares,
+        CentralSquares,
+        WhiteAttackMap,
+        BlackAttackMap,
+        WhitePawnAttackMap,
+        BlackPawnAttackMap,
+        KingSafetyMask
+    }
+
+    // 현재 표시 중인 비트보드 타입
+    public BitboardType currentBitboardType = BitboardType.None;
+
+    // 비트보드 오버레이 색상 설정
+    private Color bitboardOverlayColor = new Color(0f, 1f, 0f, 0.8f); // 녹색 반투명 (1의 값)
+    private Color bitZeroColor = new Color(0.2f, 0.2f, 0.2f, 0.2f); // 회색 반투명 (0의 값)
+    private Color bitOneColor = new Color(1f, 0.5f, 0.5f, 0.5f); // 빨간색 반투명
+
+    /// <summary>
+    /// 비트보드 타입을 선택하여 시각화합니다.
+    /// </summary>
+    /// <param name="bitboardType">표시할 비트보드 타입</param>
+    /// <param name="gameState">체스 게임 상태</param>
+    public void VisualizeBitboard(BitboardType bitboardType, ChessGameState gameState)
+    {
+        // 이전 오버레이 정리
+        ClearBitboardOverlays();
+        
+        // 선택된 타입이 None이면 시각화하지 않음
+        if (bitboardType == BitboardType.None)
+        {
+            currentBitboardType = BitboardType.None;
+            return;
+        }
+
+        // 업데이트가 필요한 데이터 갱신
+        gameState.UpdateAttackMaps();
+        gameState.UpdatePinInformation();
+        gameState.UpdateCheckInformation();
+        
+        // 비트보드 가져오기
+        ulong bitboard = GetBitboardByType(bitboardType, gameState);
+        
+        // 비트보드 시각화
+        VisualizeBitboardValue(bitboard);
+        
+        // 현재 타입 저장
+        currentBitboardType = bitboardType;
+    }
+
+    /// <summary>
+    /// 비트보드 타입에 따라 해당 비트보드 값을 반환합니다.
+    /// </summary>
+    private ulong GetBitboardByType(BitboardType bitboardType, ChessGameState gameState)
+    {
+        switch (bitboardType)
+        {
+            case BitboardType.WhitePieces:
+                return gameState.WhitePieces;
+            case BitboardType.BlackPieces:
+                return gameState.BlackPieces;
+            case BitboardType.AllPieces:
+                return gameState.AllPieces;
+            case BitboardType.WhitePawns:
+                return gameState.BitBoards[ChessGameState.WHITE_PAWN];
+            case BitboardType.BlackPawns:
+                return gameState.BitBoards[ChessGameState.BLACK_PAWN];
+            case BitboardType.WhiteKnights:
+                return gameState.BitBoards[ChessGameState.WHITE_KNIGHT];
+            case BitboardType.BlackKnights:
+                return gameState.BitBoards[ChessGameState.BLACK_KNIGHT];
+            case BitboardType.WhiteBishops:
+                return gameState.BitBoards[ChessGameState.WHITE_BISHOP];
+            case BitboardType.BlackBishops:
+                return gameState.BitBoards[ChessGameState.BLACK_BISHOP];
+            case BitboardType.WhiteRooks:
+                return gameState.BitBoards[ChessGameState.WHITE_ROOK];
+            case BitboardType.BlackRooks:
+                return gameState.BitBoards[ChessGameState.BLACK_ROOK];
+            case BitboardType.WhiteQueens:
+                return gameState.BitBoards[ChessGameState.WHITE_QUEEN];
+            case BitboardType.BlackQueens:
+                return gameState.BitBoards[ChessGameState.BLACK_QUEEN];
+            case BitboardType.WhiteKing:
+                return gameState.BitBoards[ChessGameState.WHITE_KING];
+            case BitboardType.BlackKing:
+                return gameState.BitBoards[ChessGameState.BLACK_KING];
+            case BitboardType.PinnedPieces:
+                return gameState.PinnedPieces;
+            case BitboardType.CheckingPieces:
+                return gameState.GetCheckingPieces();
+            case BitboardType.CheckBlockingMask:
+                return gameState.GetCheckBlockingMask();
+            case BitboardType.LightSquares:
+                return ChessCache.LightSquaresMask;
+            case BitboardType.DarkSquares:
+                return ChessCache.DarkSquaresMask;
+            case BitboardType.CentralSquares:
+                return ChessCache.CentralSquaresMask;
+            case BitboardType.WhiteAttackMap:
+                return gameState.whiteAttackMap;
+            case BitboardType.BlackAttackMap:
+                return gameState.blackAttackMap;
+            case BitboardType.WhitePawnAttackMap:
+                return gameState.whitePawnAttackMap;
+            case BitboardType.BlackPawnAttackMap:
+                return gameState.blackPawnAttackMap;
+            case BitboardType.KingSafetyMask:
+                int kingSquare = gameState.IsWhiteTurn ? gameState.WhiteKingSquare : gameState.BlackKingSquare;
+                return ChessCache.KingSafetyMask[kingSquare];
+            default:
+                return 0UL;
+        }
+    }
+
+    /// <summary>
+    /// 비트보드 값을 시각화합니다.
+    /// </summary>
+    private void VisualizeBitboardValue(ulong bitboard)
+    {
+        // 모든 칸에 대해 오버레이 생성 (0과 1 모두 표시)
+        for (int square = 0; square < 64; square++)
+        {
+            bool isSet = ((bitboard >> square) & 1UL) != 0;
+            CreateBitboardOverlay(square, isSet);
+        }
+        
+        // 비트보드 값을 콘솔에 출력 (디버그용)
+        Debug.Log("비트보드 값:\n" + BitHelper.BitboardToString(bitboard));
+    }
+
+    /// <summary>
+    /// 특정 위치에 비트보드 오버레이를 생성합니다.
+    /// </summary>
+    private void CreateBitboardOverlay(int square, bool isSet)
+    {
+        Vector3 position = SquareToPosition(square);
+        
+        // 새 오버레이 생성
+        GameObject overlay = new GameObject($"BitboardOverlay_{square}");
+        overlay.transform.SetParent(boardTransform);
+        overlay.transform.localPosition = position;
+        
+        // 스프라이트 렌더러 추가
+        SpriteRenderer renderer = overlay.AddComponent<SpriteRenderer>();
+        renderer.sortingOrder = 20; // 기물보다 위에 표시
+        
+        // 스퀘어 스프라이트 생성
+        renderer.sprite = CreateSquareSprite();
+        
+        // 색상 설정
+        renderer.color = isSet ? bitOneColor : bitZeroColor;
+        
+        // 중앙에 텍스트 추가 (0 또는 1 표시)
+        GameObject textObj = new GameObject("BitText");
+        textObj.transform.SetParent(overlay.transform);
+        textObj.transform.localPosition = Vector3.zero;
+        
+        TextMeshPro textMesh = textObj.AddComponent<TextMeshPro>();
+        textMesh.sortingOrder = 3;
+        textMesh.text = isSet ? "1" : "0";
+        textMesh.alignment = TextAlignmentOptions.Center;
+        textMesh.fontSize = 10;
+        textMesh.color = Color.blue;
+        
+        // 딕셔너리에 추가
+        bitboardOverlays[square] = overlay;
+    }
+
+    /// <summary>
+    /// 정사각형 스프라이트를 생성합니다.
+    /// </summary>
+    private Sprite CreateSquareSprite()
+    {
+        int size = 32;
+        Texture2D texture = new Texture2D(size, size);
+        Color[] colors = new Color[size * size];
+        
+        for (int i = 0; i < colors.Length; i++)
+        {
+            colors[i] = Color.white;
+        }
+        
+        texture.SetPixels(colors);
+        texture.Apply();
+        
+        return Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 32f);
+    }
+
+    /// <summary>
+    /// 모든 비트보드 오버레이를 제거합니다.
+    /// </summary>
+    public void ClearBitboardOverlays()
+    {
+        foreach (var overlay in bitboardOverlays.Values)
+        {
+            if (overlay != null)
+            {
+                Destroy(overlay);
+            }
+        }
+        
+        bitboardOverlays.Clear();
+        currentBitboardType = BitboardType.None;
+    }
+
+    /// <summary>
+    /// 현재 표시 중인 비트보드 타입을 반환합니다.
+    /// </summary>
+    public BitboardType GetCurrentBitboardType()
+    {
+        return currentBitboardType;
+    }
+
+    /// <summary>
+    /// 비트보드 오버레이 색상을 설정합니다.
+    /// </summary>
+    public void SetBitboardColors(Color zeroColor, Color oneColor)
+    {
+        bitZeroColor = zeroColor;
+        bitOneColor = oneColor;
+        
+        // 색상 변경 시 현재 표시 중인 오버레이도 업데이트
+        foreach (var pair in bitboardOverlays)
+        {
+            SpriteRenderer renderer = pair.Value.GetComponent<SpriteRenderer>();
+            if (renderer != null)
+            {
+                // 현재 색상이 zeroColor에 가까우면 0, oneColor에 가까우면 1
+                bool isOne = renderer.color.g > 0.5f; // 녹색 성분으로 구분 (간단하게)
+                renderer.color = isOne ? bitOneColor : bitZeroColor;
+            }
+        }
+    }
+
+    #endregion
 } 
