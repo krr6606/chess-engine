@@ -9,6 +9,7 @@ public abstract class AIPlayer : BasePlayer
 {
     protected ChessGameState currentState;
     [SerializeField] protected float thinkTime = 1.0f;
+    public float ThinkTime => thinkTime;
     protected float lastMoveTime;
     protected bool isThinking = false;
     public bool IsThinking => isThinking;
@@ -50,19 +51,12 @@ public abstract class AIPlayer : BasePlayer
             Debug.LogWarning("중복 턴 시작 탐지됨: 이미 AI가 생각 중입니다.");
             return;
         }
+        Debug.Log($"{playerName}의 이동 계산 시작");
 
-        // 잠시 대기 후 계산 시작 (메인 스레드와의 동기화를 위해)
-        StartCoroutine(DelayedThinking());
-
-    }
-    private IEnumerator DelayedThinking()
-    {
-        // 한 프레임 대기하여 메인 스레드가 WaitUntil에 도달하도록 함
-        yield return null;
-
-        // 이제 계산 시작
         StartThinking();
+        Debug.Log($"{playerName}의 이동 계산 끝?");
     }
+
     public override void OnMoveExecuted(Move move)
     {
         base.OnMoveExecuted(move);
@@ -122,8 +116,7 @@ public abstract class AIPlayer : BasePlayer
             {
                 ForceMoveSelection();
             }
-            
-            isThinking = false;
+
         }
     }
     
@@ -170,17 +163,32 @@ public abstract class AIPlayer : BasePlayer
     }
 
     // 강제로 이동 선택 (시간 초과시)
-    protected virtual void ForceMoveSelection()
+    public virtual void ForceMoveSelection()  // public으로 변경하여 외부에서 호출 가능하게
     {
+        Debug.Log($"{playerName}의 이동 강제 선택");
+
+        // 아직 생각 중이라면 취소
+        CancelThinking();
+
         // 현재까지의 최선의 이동 실행(기본 랜덤)
         var legalMoves = GetLegalMoves();
         if (legalMoves.Count > 0)
         {
             int randomIndex = random.Next(0, legalMoves.Count);
-            ExecuteMove(legalMoves[randomIndex]);
+            selectedMove = legalMoves[randomIndex];
+            moveReady = true;
+
+            // 이동 바로 실행
+            ExecuteMove(selectedMove);
+
+            // 생각 상태 초기화
+            isThinking = false;
+        }
+        else
+        {
+            Debug.LogError($"{playerName}에게 합법적인 이동이 없습니다!");
         }
     }
-
     // 비동기적으로 이동 계산
     protected virtual async Task CalculateMoveAsync(CancellationToken cancelToken)
     {
@@ -200,6 +208,8 @@ public abstract class AIPlayer : BasePlayer
                 // 이동 계산이 완료되면 메인 스레드에서 처리할 수 있도록 플래그 설정
                 if (!cancelToken.IsCancellationRequested)
                 {
+                    Debug.Log($"AI 이동 계산 완료: {selectedMove}");
+
                     moveReady = true;
                 }
             }

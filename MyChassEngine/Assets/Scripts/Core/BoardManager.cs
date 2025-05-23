@@ -327,10 +327,10 @@ public class BoardManager : MonoBehaviour
         Debug.Log($"생성된 이동 수: {AllMoves.Count}");
     }
     // Move 객체를 이용해 체스 이동을 실행하는 메서드
-    private IEnumerator ExecuteMove(Move move)
+    private void ExecuteMove(Move move)
     {
         Debug.Log($"isExecutingMove: {isExecutingMove}");
-        if (!IsValidMove(move) || isExecutingMove) yield return null;
+        if (!IsValidMove(move) || isExecutingMove) return;
 
         isExecutingMove = true;
 
@@ -363,51 +363,8 @@ public class BoardManager : MonoBehaviour
             blackPlayer?.OnMoveExecuted(move);
         }
 
-        // 새 이동 리스트 생성
-        GenerateMovesForCurrentState();
-
-        // 게임 종료 확인
-        if (IsGameOver())
-        {
-            Debug.Log($"게임 종료! 상태: {currentState.CurrentGameState}");
-
-            // 게임 종료 상태가 변경되었으므로 이벤트 다시 발생
-            OnGameStateChanged.Invoke(currentState);
-
-            // 양쪽 플레이어에게 게임 종료 알림
-            whitePlayer?.OnGameEnded();
-            blackPlayer?.OnGameEnded();
-            isExecutingMove = false;
-
-            yield return null;
-        }
-
-        // 다음 차례 플레이어 결정
-        IPlayer nextPlayer = currentState.IsWhiteTurn ? whitePlayer : blackPlayer;
-
-        // 다음 플레이어가 AI인 경우
-        if (nextPlayer != null && !nextPlayer.IsHumanPlayer)
-        {
-            Debug.Log($"AI 플레이어의 턴이 시작됩니다. 계산이 완료될 때까지 대기...");
-
-            // AI의 턴이 시작되기를 기다림
-            nextPlayer.OnTurnStarted();
-
-            // AI가 생각을 시작하면 이 플래그가 true가 됨
-            yield return new WaitUntil(() => ((AIPlayer)nextPlayer).IsThinking);
-
-            // AI가 생각을 마칠 때까지 대기
-            yield return new WaitUntil(() => !((AIPlayer)nextPlayer).IsThinking);
-
-            Debug.Log($"AI 계산 완료, 게임 진행 계속됩니다.");
-        }
-        else
-        {
-            // 인간 플레이어의 경우 즉시 턴 시작
-            nextPlayer?.OnTurnStarted();
-        }
-        isExecutingMove = false;
-
+  
+        return;
 
     }
 
@@ -422,50 +379,53 @@ public class BoardManager : MonoBehaviour
             // 아직 처리 중이 아니면 처리 시작
             if (!isProcessingMoves)
             {
-                StartCoroutine(ProcessMoveQueue());
+                ProcessMoveQueue();
             }
         }
-    }
-    private IEnumerator ProcessMoveQueue()
-    {
-        isProcessingMoves = true;
-
-        while (moveQueue.Count > 0)
+        else
         {
-            Debug.Log("1");
-            // 큐가 비어있지 않고 실행 중인 이동이 없을 때만 다음 이동 실행
+            Debug.LogWarning($"유효하지 않은 이동 요청: {move}"); 
+        }
+    }
+    private void ProcessMoveQueue()
+    {
+        if (isProcessingMoves)
+        {
+            Debug.LogWarning("이미 이동 큐 처리 중입니다.");
+            return;
+        }
+
+        isProcessingMoves = true;
+        Debug.Log($"이동 큐 처리 시작 (큐 크기: {moveQueue.Count})");
+
+        if (moveQueue.Count > 0)
+        { 
+            // 실행 중인 이동이 없을 때만 다음 이동 실행
             if (!isExecutingMove)
             {
-                Debug.Log("2");
-
                 Move nextMove = moveQueue.Dequeue();
-                yield return ExecuteMove(nextMove);
-                Debug.Log("3");
+                Debug.Log($"큐에서 다음 이동 실행: {nextMove}, 남은 이동: {moveQueue.Count}");
+
+                ExecuteMove(nextMove);
 
                 // 큐 처리 중 게임이 종료된 경우 나머지 큐 처리 중단
                 if (IsGameOver())
                 {
                     Debug.Log("게임이 종료되었습니다. 남은 이동 요청 취소됨.");
                     moveQueue.Clear();
-                    break;
+                    return;
                 }
-
-                // 다음 이동 처리 전 잠시 대기 (UI 업데이트 등을 위해)
-                yield return new WaitForSeconds(0.1f);
-                Debug.Log("4");
 
             }
             else
             {
-                // 실행 중인 이동이 있으면 완료될 때까지 대기
-                Debug.Log("a");
+                Debug.Log("이동 실행 중, 대기 중...");
 
-                yield return null;
             }
         }
 
         isProcessingMoves = false;
-        Debug.Log("이동 큐 처리 완료");
+
     }
 
     // 이전 움직임을 취소하고 상태를 되돌리는 메서드
@@ -756,6 +716,45 @@ public class BoardManager : MonoBehaviour
     public void NotifyAITurnEnded()
     {
         isAIThinking = false;
+        // 새 이동 리스트 생성
+        GenerateMovesForCurrentState();
+
+        // 게임 종료 확인
+        if (IsGameOver())
+        {
+            Debug.Log($"게임 종료! 상태: {currentState.CurrentGameState}");
+
+            // 게임 종료 상태가 변경되었으므로 이벤트 다시 발생
+            OnGameStateChanged.Invoke(currentState);
+
+            // 양쪽 플레이어에게 게임 종료 알림
+            whitePlayer?.OnGameEnded();
+            blackPlayer?.OnGameEnded();
+            isExecutingMove = false;
+
+            return;
+        }
+        isExecutingMove = false;
+
+        // 다음 차례 플레이어 결정
+        IPlayer nextPlayer = currentState.IsWhiteTurn ? whitePlayer : blackPlayer;
+        Debug.Log("다음 플레이어 상태");
+
+        // 다음 플레이어가 AI인 경우
+        if (nextPlayer != null && !nextPlayer.IsHumanPlayer)
+        {
+
+            nextPlayer?.OnTurnStarted();
+            Debug.Log($"AI 계산 완료, 게임 진행 계속됩니다. 이동 큐 상태: {moveQueue.Count}");
+        }
+        else
+        {
+
+            nextPlayer?.OnTurnStarted();
+        }
+
+
+         
         Debug.Log("AI 턴 종료 - 사용자 입력 가능");
     }
 

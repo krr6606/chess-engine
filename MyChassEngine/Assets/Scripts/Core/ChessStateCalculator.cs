@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using System.Threading.Tasks;
 
 /// <summary>
 /// 체스 상태 관리 및 이동 생성을 전담하는 경량화된 관리자 클래스

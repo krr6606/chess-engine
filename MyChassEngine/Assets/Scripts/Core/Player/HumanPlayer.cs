@@ -249,6 +249,8 @@ public class HumanPlayer : BasePlayer
     public override void OnMoveExecuted(Move move)
     {
         base.OnMoveExecuted(move);
+        // AI 턴 종료를 ChessManager에 알림
+        chessManager.NotifyAITurnEnded();
         Debug.Log($"{playerName}의 이동 완료");
     }
 

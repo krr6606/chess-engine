@@ -20,7 +20,7 @@ public abstract class BasePlayer : MonoBehaviour, IPlayer
     public virtual void OnMoveExecuted(Move move)
     {
         isMyTurn = false;
-        StopAllCoroutines();
+
     }
 
     public virtual void OnGameEnded()

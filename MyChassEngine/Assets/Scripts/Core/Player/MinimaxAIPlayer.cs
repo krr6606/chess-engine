@@ -14,7 +14,7 @@ public class MinimaxAIPlayer : AIPlayer
     [SerializeField] private int maxSearchDepth = 6; // 반복 심화 탐색 최대 깊이
     [SerializeField] private bool useIterativeDeepening = true; // 반복 심화 탐색 사용 여부
     [SerializeField] private bool debugMode = false; // 디버그 모드
-    [SerializeField] private float maxThinkingTime = 30f; // 최대 생각 시간 (초)
+    [SerializeField] public float maxThinkingTime = 3f; // 최대 생각 시간 (초)
     
     // 성능 측정을 위한 변수
     private Stopwatch stopwatch = new Stopwatch();
@@ -266,8 +266,8 @@ protected override void CalculateMove(CancellationToken cancelToken)
         
         // MVV-LVA로 이동 정렬
         stateManager.SortMovesByMVVLVA(legalMoves, state);
-        
-        if (legalMoves.Count == 0) return null;
+
+        if (legalMoves.Count == 0) { Debug.Log("move null"); return null; }
         
         Move bestMove = legalMoves[0]; // 초기 최선의 이동
         int bestScore = int.MinValue;
@@ -441,50 +441,19 @@ protected override void CalculateMove(CancellationToken cancelToken)
                 {
                     if (cancelToken.IsCancellationRequested) break;
                     
-                    // 동시성 문제 해결: 깊은 깊이에서는 상태 복제를 사용
-                    // 얕은 깊이에서는 성능을 위해 Undo 사용
-                    if (depth >= 4) // 깊은 탐색에서는 복제 사용
-                    {
-                        // 깊은 복사를 통해 안전하게 상태 복제 (스레드 안전)
-                        ChessGameState clonedState = state.Clone();
-                        
-                        // 이동 적용
-                        stateManager.ApplyMoveToState(clonedState, move);
-                        
-                        // 복제된 상태로 재귀 호출
-                        int score = Minimax(clonedState, depth - 1, alpha, beta, false, cancelToken);
-                        
-                        if (score > maxScore)
-                        {
-                            maxScore = score;
-                            bestMove = move;
-                        }
-                    }
-                    else // 얕은 탐색에서는 성능을 위해 Undo 사용
-                    {
+
                         var undoInfo = stateManager.ApplyMoveWithUndo(state, move);
                         int score;
-                        
-                        try {
+
                             score = Minimax(state, depth - 1, alpha, beta, false, cancelToken);
-                        }
-                        finally {
-                            // 이동 되돌리기 (예외가 발생해도 반드시 실행)
-                            stateManager.UndoLastMove(state, undoInfo);
-                            
-                            // 복원 후 상태 검증 (성능 영향을 줄이기 위해 일부 깊이에서만 수행)
-                            if (depth >= currentMaxDepth - 1 && random.Next(100) == 0)
-                            {
-                                ValidateGameState(state, $"복원후_검증_깊이{depth}");
-                            }
-                        }
-                        
+
+                            stateManager.UndoLastMove(state, undoInfo);                           
+
                         if (score > maxScore)
                         {
                             maxScore = score;
                             bestMove = move;
                         }
-                    }
                     
                     alpha = Math.Max(alpha, maxScore);
                     
@@ -606,88 +575,89 @@ protected override void CalculateMove(CancellationToken cancelToken)
         
         return hash;
     }
-    
+
     private int EvaluatePosition(ChessGameState state)
     {
         // 게임 종료 상태 특별 처리
         if (state.CurrentGameState == ChessGameState.GameState.Checkmate)
         {
             // 체크메이트 시 현재 움직일 차례가 패배한 경우
-
-            return state.IsWhiteTurn ? -10000 : 10000;
+            return -10000; // 현재 턴인 플레이어가 패배했으므로 최소값
         }
-        
+
         if (state.CurrentGameState == ChessGameState.GameState.Stalemate ||
             state.CurrentGameState == ChessGameState.GameState.DrawByFiftyMoveRule)
         {
             return 0; // 무승부는 0점
         }
-        
+
+        // 항상 현재 플레이어 입장에서 평가 (백색이 현재 턴이면 백색 관점, 흑색이 현재 턴이면 흑색 관점)
+        int perspective = state.IsWhiteTurn ? 1 : -1;
+
         // 향상된 평가 함수: 기물 가치 + 위치 보너스 + 기물 기동성 + 킹 안전 + 공격/방어
         int score = 0;
-        
+
         // 기물 가치 설정
         int pawnValue = 100;
         int knightValue = 320;
         int bishopValue = 330;
         int rookValue = 500;
         int queenValue = 900;
-        
+
         // 백색 기물 점수 계산
-        score += BitHelper.CountBits(state.BitBoards[ChessGameState.WHITE_PAWN]) * pawnValue;
-        score += BitHelper.CountBits(state.BitBoards[ChessGameState.WHITE_KNIGHT]) * knightValue;
-        score += BitHelper.CountBits(state.BitBoards[ChessGameState.WHITE_BISHOP]) * bishopValue;
-        score += BitHelper.CountBits(state.BitBoards[ChessGameState.WHITE_ROOK]) * rookValue;
-        score += BitHelper.CountBits(state.BitBoards[ChessGameState.WHITE_QUEEN]) * queenValue;
-        
-        // 흑색 기물 점수 계산 (마이너스)
-        score -= BitHelper.CountBits(state.BitBoards[ChessGameState.BLACK_PAWN]) * pawnValue;
-        score -= BitHelper.CountBits(state.BitBoards[ChessGameState.BLACK_KNIGHT]) * knightValue;
-        score -= BitHelper.CountBits(state.BitBoards[ChessGameState.BLACK_BISHOP]) * bishopValue;
-        score -= BitHelper.CountBits(state.BitBoards[ChessGameState.BLACK_ROOK]) * rookValue;
-        score -= BitHelper.CountBits(state.BitBoards[ChessGameState.BLACK_QUEEN]) * queenValue;
-        
+        int whiteMaterial =
+            BitHelper.CountBits(state.BitBoards[ChessGameState.WHITE_PAWN]) * pawnValue +
+            BitHelper.CountBits(state.BitBoards[ChessGameState.WHITE_KNIGHT]) * knightValue +
+            BitHelper.CountBits(state.BitBoards[ChessGameState.WHITE_BISHOP]) * bishopValue +
+            BitHelper.CountBits(state.BitBoards[ChessGameState.WHITE_ROOK]) * rookValue +
+            BitHelper.CountBits(state.BitBoards[ChessGameState.WHITE_QUEEN]) * queenValue;
+
+        // 흑색 기물 점수 계산
+        int blackMaterial =
+            BitHelper.CountBits(state.BitBoards[ChessGameState.BLACK_PAWN]) * pawnValue +
+            BitHelper.CountBits(state.BitBoards[ChessGameState.BLACK_KNIGHT]) * knightValue +
+            BitHelper.CountBits(state.BitBoards[ChessGameState.BLACK_BISHOP]) * bishopValue +
+            BitHelper.CountBits(state.BitBoards[ChessGameState.BLACK_ROOK]) * rookValue +
+            BitHelper.CountBits(state.BitBoards[ChessGameState.BLACK_QUEEN]) * queenValue;
+
+        // 기물 점수 차이에 perspective 적용 (백색 관점이면 백-흑, 흑색 관점이면 흑-백)
+        score += perspective * (whiteMaterial - blackMaterial);
+
         // 기물 위치 보너스 점수 (센터 지배, 발전 등)
-        score += CalculatePositionalBonus(state);
-        
+        score += perspective * CalculatePositionalBonus(state);
+
         // 공격/방어 점수 (체크, 핀 등)
-        score += CalculateAttackDefenseBonus(state);
-        
+        score += perspective * CalculateAttackDefenseBonus(state);
+
         // 킹 안전 점수
-        score += CalculateKingSafetyBonus(state);
-        
-        // AI 색상에 따른 점수 조정
-        if (!state.IsWhiteTurn) {
-            // 흑색 턴에서는 점수를 반전
-            score = -score;
-        }
-        
+        score += perspective * CalculateKingSafetyBonus(state);
+
         return score;
     }
-    
+
     // 기물 위치에 따른 보너스 점수 계산
     private int CalculatePositionalBonus(ChessGameState state)
     {
         int bonus = 0;
-        
+
         // 확장된 센터 영역 (중앙 16칸)
         ulong extendedCenterSquares = 0x00003C3C3C3C0000UL;
-        
+
         // 센터 지배 보너스
         bonus += 5 * BitHelper.CountBits(state.BitBoards[ChessGameState.WHITE_PAWN] & extendedCenterSquares);
         bonus -= 5 * BitHelper.CountBits(state.BitBoards[ChessGameState.BLACK_PAWN] & extendedCenterSquares);
-        
+
         bonus += 10 * BitHelper.CountBits(state.BitBoards[ChessGameState.WHITE_KNIGHT] & extendedCenterSquares);
         bonus -= 10 * BitHelper.CountBits(state.BitBoards[ChessGameState.BLACK_KNIGHT] & extendedCenterSquares);
-        
+
         bonus += 8 * BitHelper.CountBits(state.BitBoards[ChessGameState.WHITE_BISHOP] & extendedCenterSquares);
         bonus -= 8 * BitHelper.CountBits(state.BitBoards[ChessGameState.BLACK_BISHOP] & extendedCenterSquares);
-        
+
         // 나이트에 대한 추가 보너스: 외곽에 있으면 패널티
         ulong edgeSquares = 0xFF818181818181FFUL;
         bonus -= 15 * BitHelper.CountBits(state.BitBoards[ChessGameState.WHITE_KNIGHT] & edgeSquares);
         bonus += 15 * BitHelper.CountBits(state.BitBoards[ChessGameState.BLACK_KNIGHT] & edgeSquares);
-        
+
         // 백색 폰 전진 보너스 (더 앞쪽에 있을수록 가치 증가)
         for (int rank = 1; rank < 7; rank++)
         {
@@ -695,7 +665,7 @@ protected override void CalculateMove(CancellationToken cancelToken)
             int rankBonus = rank * 2; // 높은 랭크일수록 더 큰 보너스
             bonus += rankBonus * BitHelper.CountBits(state.BitBoards[ChessGameState.WHITE_PAWN] & rankMask);
         }
-        
+
         // 흑색 폰 전진 보너스
         for (int rank = 6; rank > 0; rank--)
         {
@@ -703,7 +673,7 @@ protected override void CalculateMove(CancellationToken cancelToken)
             int rankBonus = (7 - rank) * 2; // 낮은 랭크일수록 더 큰 보너스
             bonus -= rankBonus * BitHelper.CountBits(state.BitBoards[ChessGameState.BLACK_PAWN] & rankMask);
         }
-        
+
         // 비숍 페어 보너스
         if (BitHelper.CountBits(state.BitBoards[ChessGameState.WHITE_BISHOP]) >= 2)
         {
@@ -713,15 +683,14 @@ protected override void CalculateMove(CancellationToken cancelToken)
         {
             bonus -= 30;
         }
-        
+
         return bonus;
     }
-    
     // 공격 및 방어 관련 보너스 계산
     private int CalculateAttackDefenseBonus(ChessGameState state)
     {
         int bonus = 0;
-        
+
         // 체크 상황 보너스
         if (state.IsInCheck(!state.IsWhiteTurn))
         {
@@ -731,33 +700,33 @@ protected override void CalculateMove(CancellationToken cancelToken)
         {
             bonus -= 10; // 자신이 체크 상태면 패널티
         }
-        
+
         // 핀된 기물 보너스/패널티
         int whitePinnedCount = BitHelper.CountBits(state.PinnedPieces & state.WhitePieces);
         int blackPinnedCount = BitHelper.CountBits(state.PinnedPieces & state.BlackPieces);
         bonus -= whitePinnedCount * 15;
         bonus += blackPinnedCount * 15;
-        
+
         return bonus;
     }
-    
+
     // 킹 안전 관련 보너스 계산
     private int CalculateKingSafetyBonus(ChessGameState state)
     {
         int bonus = 0;
-        
+
         // 백색 킹 주변의 아군 기물 수
         int whiteKingSquare = state.WhiteKingSquare;
         int whiteKingProtection = CountProtectingPieces(state, whiteKingSquare, true);
-        
+
         // 흑색 킹 주변의 아군 기물 수
         int blackKingSquare = state.BlackKingSquare;
         int blackKingProtection = CountProtectingPieces(state, blackKingSquare, false);
-        
+
         // 킹 보호 보너스
         bonus += whiteKingProtection * 5;
         bonus -= blackKingProtection * 5;
-        
+
         // 캐슬링 권한 보너스
         if (state.WhiteKingSideCastleRight || state.WhiteQueenSideCastleRight)
         {
@@ -767,10 +736,10 @@ protected override void CalculateMove(CancellationToken cancelToken)
         {
             bonus -= 15;
         }
-        
+
         return bonus;
     }
-    
+
     // 킹 주변의 아군 기물 수 계산
     private int CountProtectingPieces(ChessGameState state, int kingSquare, bool isWhite)
     {
@@ -809,7 +778,7 @@ protected override void CalculateMove(CancellationToken cancelToken)
     }
     
     // 강제 이동 선택 메서드 개선
-    protected override void ForceMoveSelection()
+    public override void ForceMoveSelection()
     {
         if (!isRecoveryMode)
         {
