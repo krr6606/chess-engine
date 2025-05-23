@@ -491,18 +491,15 @@ public class BoardManager : MonoBehaviour
     }
 
     // 플레이어 턴 재설정
-    private async void ResetPlayerTurns()
+    private void ResetPlayerTurns()
     {
-       await Task.Run(() =>
-        {
+
             // 모든 플레이어의 이전 상태 초기화
             whitePlayer?.OnGameEnded();
             blackPlayer?.OnGameEnded();
-        });
-        await Task.Run(() =>
-        {
+
             SetPlayerTurn();
-        });
+
         
 
     }

@@ -364,11 +364,10 @@ protected override void CalculateMove(CancellationToken cancelToken)
         return a ^ b;
     }
     
-    // Minimax 메서드 개선 - 동시성 문제와 상태 복원 실패 방지
+    // Minimax 메서드 
     private int Minimax(ChessGameState state, int depth, int alpha, int beta, bool isMaximizingPlayer, CancellationToken cancelToken)
     {
-        try
-        {
+
             if (cancelToken.IsCancellationRequested) return 0;
             
             // 검증 추가 (깊은 깊이에서는 빈도를 낮춤)
@@ -525,13 +524,8 @@ protected override void CalculateMove(CancellationToken cancelToken)
                 
                 return minScore;
             }
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError($"[미니맥스 AI] Minimax 계산 중 예외 발생: {ex.Message} (깊이: {depth}, 최대화: {isMaximizingPlayer})");
-            // 오류가 발생하면 중립적인 평가 값 반환
-            return 0;
-        }
+
+
     }
     
     // 체스 상태 해시 계산 (Zobrist 해싱) - 안전한 비트 연산 사용
