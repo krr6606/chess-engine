@@ -246,13 +246,6 @@ public class HumanPlayer : BasePlayer
         ClearSelection();
     }
 
-    public override void OnMoveExecuted(Move move)
-    {
-        base.OnMoveExecuted(move);
-        // AI 턴 종료를 ChessManager에 알림
-        chessManager.NotifyAITurnEnded();
-        Debug.Log($"{playerName}의 이동 완료");
-    }
 
     public override void OnGameEnded()
     {
@@ -329,7 +322,7 @@ public class HumanPlayer : BasePlayer
         UnhighlightAllMoves();
         Debug.Log("이동 요청 전송 전");
         // 실제 이동 비동기 실행
-        chessManager.QueueMove(move);
+        chessManager.NotifyHumanTurnEnded(move);
         Debug.Log("이동 요청 전송됨");
 
 
@@ -338,5 +331,6 @@ public class HumanPlayer : BasePlayer
         oldSelectedSquare = selectedSquare;
         oldTargetSquare = new Coord(move.ToSquare);
         selectedSquare = nullSquare;
+        isMyTurn = false;
     }
 } 

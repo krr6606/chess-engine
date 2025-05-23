@@ -7,6 +7,7 @@ using System.Collections;
 
 public abstract class AIPlayer : BasePlayer
 {
+
     protected ChessGameState currentState;
     [SerializeField] protected float thinkTime = 1.0f;
     public float ThinkTime => thinkTime;
@@ -19,7 +20,7 @@ public abstract class AIPlayer : BasePlayer
     protected Task aiTask;
     protected Move selectedMove;
     protected bool moveReady = false;
-    
+    readonly public Guid guid;
     // 스레드 안전한 랜덤 생성기
     protected System.Random random = new System.Random();
     
@@ -29,13 +30,19 @@ public abstract class AIPlayer : BasePlayer
     public override void Initialize(BoardManager manager)
     {
         base.Initialize(manager);
-        playerName = "AI Player";
+
+        if (guid == default(Guid))
+        {
+            Guid guid = Guid.NewGuid();
+        }
+        playerName = "AI Player" + guid;
         
         // 랜덤 생성기 초기화
         random = new System.Random(Environment.TickCount);
         
         // 체스 상태 매니저 초기화
         stateManager = new ChessStateCalculator();
+
     }
 
     public override void OnTurnStarted()
@@ -69,7 +76,7 @@ public abstract class AIPlayer : BasePlayer
         CancelThinking();
 
         // AI 턴 종료를 ChessManager에 알림
-        chessManager.NotifyAITurnEnded();
+        chessManager.NotifyAITurnEnded(move);
     }
 
     protected virtual void StartThinking()
@@ -83,6 +90,7 @@ public abstract class AIPlayer : BasePlayer
         
         // 비동기적으로 AI 이동 계산 시작
         aiTask = CalculateMoveAsync(cancelTokenSource.Token);
+        
     }
     
     protected void CancelThinking()
@@ -94,7 +102,10 @@ public abstract class AIPlayer : BasePlayer
             cancelTokenSource = null;
         }
     }
-
+    private void Start()
+    {
+        
+    }
     public override void Update()
     {
         base.Update();
@@ -103,7 +114,7 @@ public abstract class AIPlayer : BasePlayer
         if (!isThinking) return;
         
         // 생각 시간이 지났는지 확인
-        if (Time.time - lastMoveTime >= thinkTime || moveReady)
+        if ((Time.time + thinkTime) - (lastMoveTime + thinkTime) >= thinkTime || moveReady)
         {
             // 이동이 준비되었으면 실행
             if (moveReady && selectedMove.FromSquare != 0)
@@ -112,8 +123,9 @@ public abstract class AIPlayer : BasePlayer
                 ValidateAndExecuteMove();
             }
             // 아직 이동이 준비되지 않았지만 시간이 다 되었으면 강제로 이동 결정
-            else if (Time.time - lastMoveTime >= thinkTime)
+            else if ((Time.time + thinkTime) - (lastMoveTime + thinkTime) >= thinkTime) 
             {
+                Debug.Log($"지난 시간: {Time.time} 설정된 마지막 시간:{lastMoveTime} isThinking: {isThinking}"); 
                 ForceMoveSelection();
             }
 
@@ -159,7 +171,7 @@ public abstract class AIPlayer : BasePlayer
 
         // 이동 큐에 추가
         Debug.Log($"AI가 이동을 실행합니다: {selectedMove}");
-        chessManager.QueueMove(selectedMove);
+        ExecuteMove(selectedMove);
     }
 
     // 강제로 이동 선택 (시간 초과시)
@@ -178,10 +190,9 @@ public abstract class AIPlayer : BasePlayer
             selectedMove = legalMoves[randomIndex];
             moveReady = true;
 
-            // 이동 바로 실행
+            // 이동 처리 로직 진입
             ExecuteMove(selectedMove);
 
-            // 생각 상태 초기화
             isThinking = false;
         }
         else
@@ -256,7 +267,7 @@ public abstract class AIPlayer : BasePlayer
     {
         if (chessManager.IsValidMove(move))
         {
-            chessManager.QueueMove(move);
+            OnMoveExecuted(move);
         }
         else
         {
@@ -266,7 +277,8 @@ public abstract class AIPlayer : BasePlayer
             if (legalMoves.Count > 0)
             {
                 int randomIndex = random.Next(0, legalMoves.Count);
-                chessManager.QueueMove(legalMoves[randomIndex]);
+                OnMoveExecuted(move);
+
             }
         }
     }
@@ -301,7 +313,7 @@ public abstract class AIPlayer : BasePlayer
         if (isMyTurn)
         {
             isMyTurn = false;
-            chessManager.NotifyAITurnEnded();
+
         }
     }
     

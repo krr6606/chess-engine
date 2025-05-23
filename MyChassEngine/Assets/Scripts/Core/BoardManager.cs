@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.Events;
@@ -327,7 +328,7 @@ public class BoardManager : MonoBehaviour
         Debug.Log($"생성된 이동 수: {AllMoves.Count}");
     }
     // Move 객체를 이용해 체스 이동을 실행하는 메서드
-    private void ExecuteMove(Move move)
+    private  void ExecuteMove(Move move)
     {
         Debug.Log($"isExecutingMove: {isExecutingMove}");
         if (!IsValidMove(move) || isExecutingMove) return;
@@ -353,15 +354,6 @@ public class BoardManager : MonoBehaviour
         // 이벤트 발생
         OnGameStateChanged.Invoke(currentState);
 
-        // 현재 이동한 플레이어에게 이동 완료 알림
-        if (wasWhiteTurn)
-        {
-            whitePlayer?.OnMoveExecuted(move);
-        }
-        else
-        {
-            blackPlayer?.OnMoveExecuted(move);
-        }
 
   
         return;
@@ -499,12 +491,23 @@ public class BoardManager : MonoBehaviour
     }
 
     // 플레이어 턴 재설정
-    private void ResetPlayerTurns()
+    private async void ResetPlayerTurns()
     {
-        // 모든 플레이어의 이전 상태 초기화
-        whitePlayer?.OnGameEnded();
-        blackPlayer?.OnGameEnded();
+       await Task.Run(() =>
+        {
+            // 모든 플레이어의 이전 상태 초기화
+            whitePlayer?.OnGameEnded();
+            blackPlayer?.OnGameEnded();
+        });
+        await Task.Run(() =>
+        {
+            SetPlayerTurn();
+        });
         
+
+    }
+    private void SetPlayerTurn()
+    {
         // 현재 턴에 맞는 플레이어만 턴 시작
         if (currentState.IsWhiteTurn)
         {
@@ -713,12 +716,16 @@ public class BoardManager : MonoBehaviour
     }
 
     // AI 턴 종료 알림 (AI 플레이어가 호출)
-    public void NotifyAITurnEnded()
+    public  void NotifyAITurnEnded(Move move)
     {
         isAIThinking = false;
+        QueueMove(move);
         // 새 이동 리스트 생성
         GenerateMovesForCurrentState();
 
+
+        // 다음 차례 플레이어 결정
+        IPlayer nextPlayer = currentState.IsWhiteTurn ? whitePlayer : blackPlayer;
         // 게임 종료 확인
         if (IsGameOver())
         {
@@ -728,36 +735,94 @@ public class BoardManager : MonoBehaviour
             OnGameStateChanged.Invoke(currentState);
 
             // 양쪽 플레이어에게 게임 종료 알림
-            whitePlayer?.OnGameEnded();
-            blackPlayer?.OnGameEnded();
+            if(nextPlayer != null)
+            {
+               if(currentState.IsWhiteTurn)
+                {
+                    whitePlayer?.OnGameEnded();
+
+                }
+                else
+                {
+                    blackPlayer?.OnGameEnded();
+                }
+            }
+            
             isExecutingMove = false;
 
             return;
         }
         isExecutingMove = false;
 
-        // 다음 차례 플레이어 결정
-        IPlayer nextPlayer = currentState.IsWhiteTurn ? whitePlayer : blackPlayer;
+
         Debug.Log("다음 플레이어 상태");
 
         // 다음 플레이어가 AI인 경우
         if (nextPlayer != null && !nextPlayer.IsHumanPlayer)
         {
+            // 한 프레임 뒤에 턴 시작
+            StartCoroutine(WaitAndStartNextTurn(nextPlayer));
 
-            nextPlayer?.OnTurnStarted();
-            Debug.Log($"AI 계산 완료, 게임 진행 계속됩니다. 이동 큐 상태: {moveQueue.Count}");
-        }
-        else
-        {
-
-            nextPlayer?.OnTurnStarted();
         }
 
 
-         
+
+
         Debug.Log("AI 턴 종료 - 사용자 입력 가능");
     }
+    //유니티 입력 시스템이 끝날 때까지 대기
+    private IEnumerator WaitAndStartNextTurn(IPlayer nextPlayer)
+    {
+        yield return null; // 한 프레임 대기
+        nextPlayer?.OnTurnStarted();
+        Debug.Log("다음 턴 시작, 게임 진행 계속됩니다. 이동 큐 상태: " + moveQueue.Count);
+    }
+    public void NotifyHumanTurnEnded(Move move)
+    {
 
+        QueueMove(move);
+        // 새 이동 리스트 생성
+        GenerateMovesForCurrentState();
+        // 다음 차례 플레이어 결정
+        IPlayer nextPlayer = currentState.IsWhiteTurn ? whitePlayer : blackPlayer;
+        // 게임 종료 확인
+        if (IsGameOver())
+        {
+            Debug.Log($"게임 종료! 상태: {currentState.CurrentGameState}");
+
+            // 게임 종료 상태가 변경되었으므로 이벤트 다시 발생
+            OnGameStateChanged.Invoke(currentState);
+
+            // 양쪽 플레이어에게 게임 종료 알림
+            if (nextPlayer != null)
+            {
+                if (nextPlayer.PlayerName == whitePlayer.PlayerName)
+                {
+                    whitePlayer?.OnGameEnded();
+
+                }
+                else
+                {
+                    blackPlayer?.OnGameEnded();
+                }
+            }
+
+            isExecutingMove = false;
+
+            return;
+        }
+        isExecutingMove = false;
+
+
+        Debug.Log("다음 플레이어 상태");
+        if (nextPlayer != null)
+        {
+            // 한 프레임 뒤에 턴 시작
+            StartCoroutine(WaitAndStartNextTurn(nextPlayer));
+
+        }
+        Debug.Log("사용자 턴 종료");
+    }
     // 현재 활성화된 플레이어가 AI인지 확인
     public bool IsCurrentPlayerAI()
     {
