@@ -3,7 +3,9 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Collections;
+using System.Collections.Concurrent;
+
+
 
 public abstract class AIPlayer : BasePlayer
 {
@@ -23,7 +25,10 @@ public abstract class AIPlayer : BasePlayer
     readonly public Guid guid;
     // 스레드 안전한 랜덤 생성기
     protected System.Random random = new System.Random();
-    
+
+    // 스레드 안전 디버그
+    protected ConcurrentQueue<string> logQueue = new ConcurrentQueue<string>();
+
     // 체스 상태 매니저 추가
     protected ChessStateCalculator stateManager;
 
@@ -45,36 +50,34 @@ public abstract class AIPlayer : BasePlayer
 
     }
 
+    protected void LogSafe(string message)
+    {
+        logQueue.Enqueue(message);
+    }
     public override void OnTurnStarted()
     {
         isMyTurn = true;
-        Debug.Log($"{playerName}의 턴 시작");
+        LogSafe($"{playerName}의 턴 시작");
         
         currentState = chessManager.GetCurrentState();
         
         // 이미 AI 턴 진행 중인지 확인
         if (isThinking)
         {
-            Debug.LogWarning("중복 턴 시작 탐지됨: 이미 AI가 생각 중입니다.");
+            LogSafe("중복 턴 시작 탐지됨: 이미 AI가 생각 중입니다.");
             return;
         }
-        Debug.Log($"{playerName}의 이동 계산 시작");
+        LogSafe($"{playerName}의 이동 계산 시작");
 
         StartThinking();
-        Debug.Log($"{playerName}의 이동 계산 끝?");
+        LogSafe($"{playerName}의 이동 계산 끝?");
     }
 
     public override void OnMoveExecuted(Move move)
     {
         base.OnMoveExecuted(move);
-        Debug.Log($"{playerName}의 이동 완료");
-        
-        // 생각 상태 초기화
-        isThinking = false;
-        
-        // 비동기 작업 취소
-        CancelThinking();
 
+        moveReady = false; // 이동이 실행되면 준비 상태 초기화
         // AI 턴 종료를 ChessManager에 알림
         chessManager.NotifyAITurnEnded(move);
     }
@@ -90,6 +93,7 @@ public abstract class AIPlayer : BasePlayer
         
         // 비동기적으로 AI 이동 계산 시작
         aiTask = CalculateMoveAsync(cancelTokenSource.Token);
+
         
     }
     
@@ -97,10 +101,13 @@ public abstract class AIPlayer : BasePlayer
     {
         if (cancelTokenSource != null)
         {
+            // 생각 상태 초기화
+            isThinking = false;
             cancelTokenSource.Cancel();
             cancelTokenSource.Dispose();
             cancelTokenSource = null;
         }
+
     }
     private void Start()
     {
@@ -109,75 +116,33 @@ public abstract class AIPlayer : BasePlayer
     public override void Update()
     {
         base.Update();
-       
-        // 생각 중이 아니면 처리하지 않음
-        if (!isThinking) return;
-        
-        // 생각 시간이 지났는지 확인
-        if ((Time.time + thinkTime) - (lastMoveTime + thinkTime) >= thinkTime || moveReady)
+        // 로그 큐 처리
+        while (logQueue.TryDequeue(out string message))
         {
-            // 이동이 준비되었으면 실행
-            if (moveReady && selectedMove.FromSquare != 0)
-            {
-                // 이동 유효성 최종 검사
-                ValidateAndExecuteMove();
-            }
-            // 아직 이동이 준비되지 않았지만 시간이 다 되었으면 강제로 이동 결정
-            else if ((Time.time + thinkTime) - (lastMoveTime + thinkTime) >= thinkTime) 
-            {
-                Debug.Log($"지난 시간: {Time.time} 설정된 마지막 시간:{lastMoveTime} isThinking: {isThinking}"); 
-                ForceMoveSelection();
-            }
-
+            Debug.Log(message);
         }
+
     }
-    
+
     // 유효성 검사 후 이동 실행
     protected virtual void ValidateAndExecuteMove()
     {
-        if (selectedMove.FromSquare == selectedMove.ToSquare) return;
-
-        // 현재 게임 상태에서 이동이 유효한지 확인
-        var currentLegalMoves = GetLegalMoves();
-        bool isValidMove = false;
-
-        foreach (var move in currentLegalMoves)
-        {
-            if (move.FromSquare == selectedMove.FromSquare && move.ToSquare == selectedMove.ToSquare)
-            {
-                isValidMove = true;
-                selectedMove = move; // 정확한 플래그 값 사용
-                break;
-            }
+        if (selectedMove.FromSquare == selectedMove.ToSquare) { 
+            LogSafe($"{playerName}이(가) 유효하지 않은 이동을 선택했습니다: {selectedMove}");
+            return; 
         }
 
-        if (!isValidMove)
-        {
-            Debug.LogWarning($"AI가 유효하지 않은 이동을 시도했습니다: {selectedMove}");
 
-            // 대체 이동 선택
-            if (currentLegalMoves.Count > 0)
-            {
-                selectedMove = currentLegalMoves[UnityEngine.Random.Range(0, currentLegalMoves.Count)];
-                Debug.Log($"대체 이동 선택: {selectedMove}");
-            }
-            else
-            {
-                // 유효한 이동이 없으면 턴 종료
-                isThinking = false;
-                return;
-            }
-        }
 
-        // 이동 큐에 추가
-        Debug.Log($"AI가 이동을 실행합니다: {selectedMove}");
+        // 이동 큐에 
+        LogSafe($"AI가 이동을 실행합니다: {selectedMove}");
         ExecuteMove(selectedMove);
     }
 
     // 강제로 이동 선택 (시간 초과시)
-    public virtual void ForceMoveSelection()  // public으로 변경하여 외부에서 호출 가능하게
+    protected virtual void ForceMoveSelection()  
     {
-        Debug.Log($"{playerName}의 이동 강제 선택");
+        LogSafe($"오버라이딩되지 않은 {playerName}의 이동 강제 선택");
 
         // 아직 생각 중이라면 취소
         CancelThinking();
@@ -188,16 +153,15 @@ public abstract class AIPlayer : BasePlayer
         {
             int randomIndex = random.Next(0, legalMoves.Count);
             selectedMove = legalMoves[randomIndex];
-            moveReady = true;
 
             // 이동 처리 로직 진입
-            ExecuteMove(selectedMove);
+            ValidateAndExecuteMove();
 
             isThinking = false;
         }
         else
         {
-            Debug.LogError($"{playerName}에게 합법적인 이동이 없습니다!");
+            LogSafe($"{playerName}에게 합법적인 이동이 없습니다!");
         }
     }
     // 비동기적으로 이동 계산
@@ -217,9 +181,9 @@ public abstract class AIPlayer : BasePlayer
                 CalculateMoveWithState(threadSafeState, cancelToken);
                 
                 // 이동 계산이 완료되면 메인 스레드에서 처리할 수 있도록 플래그 설정
-                if (!cancelToken.IsCancellationRequested)
+                if (!cancelToken.IsCancellationRequested && !moveReady)
                 {
-                    Debug.Log($"AI 이동 계산 완료: {selectedMove}");
+                    LogSafe($"AI 이동 계산 완료: {selectedMove}");
 
                     moveReady = true;
                 }
@@ -227,12 +191,12 @@ public abstract class AIPlayer : BasePlayer
             catch (OperationCanceledException)
             {
                 // 작업이 취소된 경우
-                Debug.Log("AI 이동 계산이 취소되었습니다.");
+                LogSafe("AI 이동 계산이 취소되었습니다.");
             }
             catch (Exception e)
             {
                 // 기타 예외 처리
-                Debug.LogError($"AI 이동 계산 중 오류 발생: {e.Message}");
+                LogSafe($"AI 이동 계산 중 오류 발생: {e.Message}");
             }
         }, cancelToken);
     }
@@ -265,22 +229,9 @@ public abstract class AIPlayer : BasePlayer
     // 이동 검증 후 실행
     protected void ExecuteMove(Move move)
     {
-        if (chessManager.IsValidMove(move))
-        {
-            OnMoveExecuted(move);
-        }
-        else
-        {
-            Debug.LogWarning($"AI가 유효하지 않은 이동을 시도했습니다: {move}");
-            // 대체 이동 선택
-            var legalMoves = GetLegalMoves();
-            if (legalMoves.Count > 0)
-            {
-                int randomIndex = random.Next(0, legalMoves.Count);
-                OnMoveExecuted(move);
 
-            }
-        }
+            OnMoveExecuted(move);
+        
     }
     
     // 현재 게임 상태로부터 AI 평가를 위한 임시 상태 생성
@@ -301,7 +252,7 @@ public abstract class AIPlayer : BasePlayer
     public override void OnGameEnded()
     {
         base.OnGameEnded();
-        Debug.Log($"{playerName}에게 게임 종료 알림");
+        LogSafe($"{playerName}에게 게임 종료 알림");
         
         // 생각 중이었다면 중단
         isThinking = false;

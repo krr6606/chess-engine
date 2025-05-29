@@ -17,15 +17,9 @@ public class ChessStateCalculator
         if (moves == null || moves.Count <= 1)
             return;
             
-        try
-        {
+
             moveGenerator.SortMovesByMVVLVA(moves, state);
-        }
-        catch (Exception ex)
-        {
-            Debug.LogWarning($"이동 정렬 중 오류 발생: {ex.Message}. 정렬을 건너뜁니다.");
-            // 오류 발생 시 정렬 건너뛰기 (기본 순서 유지)
-        }
+
     }
 
     
@@ -46,11 +40,13 @@ public class ChessStateCalculator
         state.UpdateAttackMaps();
         state.UpdatePinInformation();
         state.UpdateCheckInformation();
-        
-        // 이제 이동 생성
-        return moveGenerator.GenerateLegalMoves(state, includeQuietMoves);
+            // 이제 이동 생성
+            return moveGenerator.GenerateLegalMoves(state, includeQuietMoves); 
+
+
+
     }
-    
+
     /// <summary>
     /// 이동을 적용한 새로운 체스 상태를 반환합니다.
     /// 원본 상태는 변경되지 않습니다.
@@ -122,22 +118,28 @@ public class ChessStateCalculator
     {
         // 가능한 모든 이동 목록 생성
         List<Move> legalMoves = GenerateLegalMoves(state);
-        
+        bool isValid = false;
+
         // 목록에서 일치하는 이동 찾기
-        foreach (var legalMove in legalMoves)
+        foreach (Move legalMove in legalMoves)
         {
             if (legalMove.FromSquare == move.FromSquare && legalMove.ToSquare == move.ToSquare)
             {
                 // 프로모션 확인
-                if (legalMove.IsPromotion && move.IsPromotion)
+                if (legalMove.IsPromotion == move.IsPromotion)
                 {
-                    return legalMove.Flag == move.Flag;
+                    if (move.Flag == legalMove.Flag)
+                    {
+
+                        isValid = true;
+                        break;
+                    }
+
                 }
-                return true;
             }
         }
         
-        return false;
+        return isValid;
     }
     
     /// <summary>

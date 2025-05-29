@@ -341,7 +341,7 @@ public class BoardManager : MonoBehaviour
 
         // 현재 플레이어 기록 (턴 전환을 위해)
         bool wasWhiteTurn = currentState.IsWhiteTurn;
-
+        Debug.Log($"이동 실행 전 턴: {(wasWhiteTurn ? "백색" : "흑색")}"); 
         // 이동 로그
         Debug.Log($"이동 실행: {move}");
 
@@ -593,7 +593,7 @@ public class BoardManager : MonoBehaviour
     }
 
     // 이동이 현재 유효한지 확인
-    public bool IsValidMove(Move move)
+    public bool IsValidMove( Move move)
     {
         return stateManager.IsValidMove(currentState, move);
     }
@@ -719,6 +719,7 @@ public class BoardManager : MonoBehaviour
         QueueMove(move);
         // 새 이동 리스트 생성
         GenerateMovesForCurrentState();
+        MinimaxAIPlayer curPlayer = (MinimaxAIPlayer)blackPlayer;
 
 
         // 다음 차례 플레이어 결정

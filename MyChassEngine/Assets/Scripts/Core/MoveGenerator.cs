@@ -25,8 +25,6 @@ public class MoveGenerator
 				{
 					int victimPiece = state.FindPieceBitboardIndex(move.ToSquare);
 					int attackerPiece = state.FindPieceBitboardIndex(move.FromSquare);
-					
-					// 유효하지 않은 인덱스 처리
 					if (victimPiece < 0 || attackerPiece < 0)
 						return 0;
 					
@@ -41,14 +39,14 @@ public class MoveGenerator
 					return pieceValues[victimType] * 100 - pieceValues[attackerType];
 				}
 				
-				// 프로모션 우선
-				if (move.IsPromotion) return 900;
-				
-				// 체크 이동 우선 (체크 확인은 비용이 많이 들어 여기서는 생략)
-				if (move.HasFlag(Move.CheckFlag)) return 800;
-				
-				// 일반 이동
-				return 0;
+
+
+            // 체크 이동 우선 (체크 확인은 비용이 많이 들어 여기서는 생략)
+            if (move.HasFlag(Move.CheckFlag)) return 200;
+            // 프로모션 우선
+            if (move.IsPromotion) return 100;
+            // 일반 이동
+            return 0;
 			}
 			
 			// 이동 정렬 - 일관된 비교를 위해 추가 기준 포함
@@ -156,7 +154,17 @@ public class MoveGenerator
 						
 						if (!tempState.IsSquareAttacked(newKingSquare, !isWhiteTurn))
 						{
-							legalMoves.Add(move);
+							if (!includeQuietMoves)
+							{
+								if (move.IsCapture)
+								{
+									legalMoves.Add(move);
+								}
+							}
+							else 
+							{
+								legalMoves.Add(move);
+							}
 						}
 					}
 				}
@@ -186,8 +194,19 @@ public class MoveGenerator
 						
 						if (!tempState.IsSquareAttacked(newKingSquare, !isWhiteTurn))
 						{
-							legalMoves.Add(move);
-						}
+
+                        if (!includeQuietMoves)
+                        {
+                            if (move.IsCapture)
+                            {
+                                legalMoves.Add(move);
+                            }
+                        }
+                        else
+                        {
+                            legalMoves.Add(move);
+                        }
+                    }
 					}
 					// 2. 체크하는 기물을 제거하는 경우
 					else if ((board.GetCheckingPieces() & (1UL << toSquare)) != 0)
@@ -201,8 +220,19 @@ public class MoveGenerator
 						// 이동 후 자신의 킹이 체크 상태가 아닌지 확인
 						if (!tempState.IsSquareAttacked(kingSquare, !isWhiteTurn))
 						{
-							legalMoves.Add(move);
-						}
+
+                        if (!includeQuietMoves)
+                        {
+                            if (move.IsCapture)
+                            {
+                                legalMoves.Add(move);
+                            }
+                        }
+                        else
+                        {
+                            legalMoves.Add(move);
+                        }
+                    }
 					}
 					// 3. 체크를 막는 이동 (블로킹)
 					else if ((board.GetCheckBlockingMask() & (1UL << toSquare)) != 0)
@@ -216,8 +246,19 @@ public class MoveGenerator
 						// 이동 후 자신의 킹이 체크 상태가 아닌지 확인
 						if (!tempState.IsSquareAttacked(kingSquare, !isWhiteTurn))
 						{
-							legalMoves.Add(move);
-						}
+
+                        if (!includeQuietMoves)
+                        {
+                            if (move.IsCapture)
+                            {
+                                legalMoves.Add(move);
+                            }
+                        }
+                        else
+                        {
+                            legalMoves.Add(move);
+                        }
+                    }
 					}
 				}
 				
@@ -243,15 +284,26 @@ public class MoveGenerator
 				// 자신의 킹이 체크 상태가 아니면 합법적인 이동
 				if (!tempState.IsSquareAttacked(newKingSquare, !isWhiteTurn))
 				{
-					legalMoves.Add(move);
-				}
+
+                if (!includeQuietMoves)
+                {
+                    if (move.IsCapture)
+                    {
+                        legalMoves.Add(move);
+                    }
+                }
+                else
+                {
+                    legalMoves.Add(move);
+                }
+            }
 			}
 
 			return legalMoves;
 		}
-
-		// 이동 적용 도우미 메서드
-		private void ApplyMove(ChessGameState state, Move move)
+   
+    // 이동 적용 도우미 메서드
+    private void ApplyMove(ChessGameState state, Move move)
 		{
 			int fromSquare = move.FromSquare;
 			int toSquare = move.ToSquare;
@@ -298,8 +350,7 @@ public class MoveGenerator
 				else if (move.HasFlag(Move.PromoteToKnightFlag))
 					promotionPiece = state.IsWhiteTurn ? pieceNum.white | pieceNum.knight : pieceNum.black | pieceNum.knight;
 				
-				// 디버그 로그 추가
-				Debug.Log($"MoveGenerator에서 프로모션: 기물 값: {promotionPiece}");
+
 				
 				// 프로모션 적용
 				if (promotionPiece != 0) {
