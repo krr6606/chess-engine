@@ -14,7 +14,7 @@ public class BoardManager : MonoBehaviour
     
     [Header("설정")]
     [SerializeField] private string startingFEN = FENParser.StartPositionFEN;
-    [SerializeField] private bool autoStartGame = true;
+    [SerializeField] private bool autoStartGame = false;
     [SerializeField] private bool debugMode = false;
     
     // 게임 상태
@@ -70,6 +70,7 @@ public class BoardManager : MonoBehaviour
     private Queue<Move> moveQueue = new Queue<Move>();
     private bool isProcessingMoves = false;
     public bool IsProcessingMoves => isProcessingMoves;
+    public bool IsChessPlaying;
 
     [Header("디버깅 도구")]
     [SerializeField] private bool enableBitboardVisualization = false;
@@ -101,10 +102,7 @@ public class BoardManager : MonoBehaviour
     {
         if (autoStartGame)
         {
-            InitializeGame();
-            
-            // 첫 번째 플레이어(백색) 턴 시작
-            whitePlayer?.OnTurnStarted();
+            ChessGameBoardStart();
         }
     }
     readonly Coord NullChoiceSquare = new Coord(-1, -1);
@@ -174,7 +172,7 @@ public class BoardManager : MonoBehaviour
     }
 
     // 게임 초기화 (기본 FEN 사용)
-    public void InitializeGame()
+    public void InitializeGameBoard()
     {
         // 히스토리 초기화
         stateHistory.Clear();
@@ -325,12 +323,12 @@ public class BoardManager : MonoBehaviour
     private void GenerateMovesForCurrentState()
     {
         AllMoves = stateManager.GenerateLegalMoves(currentState);
-        Debug.Log($"생성된 이동 수: {AllMoves.Count}");
+
     }
     // Move 객체를 이용해 체스 이동을 실행하는 메서드
     private  void ExecuteMove(Move move)
     {
-        Debug.Log($"isExecutingMove: {isExecutingMove}");
+
         if (!IsValidMove(move) || isExecutingMove) return;
 
         isExecutingMove = true;
@@ -342,8 +340,7 @@ public class BoardManager : MonoBehaviour
         // 현재 플레이어 기록 (턴 전환을 위해)
         bool wasWhiteTurn = currentState.IsWhiteTurn;
         Debug.Log($"이동 실행 전 턴: {(wasWhiteTurn ? "백색" : "흑색")}"); 
-        // 이동 로그
-        Debug.Log($"이동 실행: {move}");
+
 
         // ChessStateManager를 통해 이동 적용
         stateManager.ApplyMoveToState(currentState, move);
@@ -366,8 +363,7 @@ public class BoardManager : MonoBehaviour
         if (IsValidMove(move))
         {
             moveQueue.Enqueue(move);
-            Debug.Log($"이동 요청 큐에 추가됨: {move}");
-            Debug.Log("isProcessingMoves = " + isProcessingMoves);
+
             // 아직 처리 중이 아니면 처리 시작
             if (!isProcessingMoves)
             {
@@ -695,7 +691,7 @@ public class BoardManager : MonoBehaviour
         SetupPlayers();
         
         // 기본 FEN으로 게임 초기화
-        InitializeGame();
+        InitializeGameBoard();
         
         // 확실히 모든 플레이어 턴 상태 초기화
         whitePlayer?.OnGameEnded();
@@ -841,6 +837,10 @@ public class BoardManager : MonoBehaviour
     // 비트보드 시각화 함수를, Update 메서드 내에 추가
     private void Update()
     {
+        if (IsChessPlaying)
+        {
+
+        }
         // 키보드 단축키로 비트보드 시각화 전환
         if (Input.GetKeyDown(KeyCode.B))
         {
@@ -922,6 +922,18 @@ public class BoardManager : MonoBehaviour
     public void ClearMoveQueue()
     {
         moveQueue.Clear();
+    }
+    private void ChessGameBoardStart()
+    {
+        IsChessPlaying = true;
+        InitializeGameBoard();
+
+        // 첫 번째 플레이어(백색) 턴 시작
+        whitePlayer?.OnTurnStarted();
+    }
+    private void ChessGameBoardEnd()
+    {
+        IsChessPlaying = false;
     }
 
     private void OnDestroy()

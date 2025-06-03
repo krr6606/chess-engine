@@ -7,10 +7,13 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using Debug = UnityEngine.Debug;
 using System.Linq;
+using UnityEngine.SocialPlatforms;
+using static TreeEditor.TreeEditorHelper;
+
 
 public class MinimaxAIPlayer : AIPlayer
 {
-    [SerializeField] private int searchDepth = 2;
+    [SerializeField] private int searchDepth = 3;
     [SerializeField] private int maxSearchDepth = 6; // 반복 심화 탐색 최대 깊이
     [SerializeField] private bool useIterativeDeepening = true; // 반복 심화 탐색 사용 여부
     [SerializeField] private bool debugMode = false; // 디버그 모드
@@ -21,6 +24,7 @@ public class MinimaxAIPlayer : AIPlayer
     private int nodesEvaluated = 0;
     private int transpositionHits = 0;
     
+
     // 트랜스포지션 테이블 항목 클래스
     private class TranspositionEntry
     {
@@ -31,7 +35,8 @@ public class MinimaxAIPlayer : AIPlayer
     
     // 트랜스포지션 테이블 (스레드 안전한 동시성 딕셔너리)
     private ConcurrentDictionary<ulong, TranspositionEntry> transpositionTable = new ConcurrentDictionary<ulong, TranspositionEntry>();
-    
+    // 반복 감지를 위한 위치 기록 딕셔너리
+    private Dictionary<ulong, int> positionHistory = new Dictionary<ulong, int>();
     // 현재 최적의 이동과 탐색 깊이
     public Move? currentBestMove; // null 가능하도록 변경
     private int currentMaxDepth;
@@ -80,6 +85,9 @@ public class MinimaxAIPlayer : AIPlayer
         
         // 트랜스포지션 테이블 초기화
         transpositionTable = new ConcurrentDictionary<ulong, TranspositionEntry>();
+
+        // 반복 감지를 위한 위치 기록 딕셔너리 초기화
+        positionHistory = new Dictionary<ulong, int>();
     }
     
     // AIPlayer.Update() 메서드 오버라이드
@@ -174,7 +182,7 @@ public class MinimaxAIPlayer : AIPlayer
                     
                     currentMaxDepth = currDepth;
                     var newBestMove = FindBestMove(threadSafeState, currDepth, cancelToken);
-                LogSafe("새로운 움직임 찾음: " + newBestMove);
+                    LogSafe("새로운 움직임 찾음: " + newBestMove);
 
 
                     // 유효한 이동을 찾은 경우에만 설정
@@ -261,7 +269,8 @@ protected override void CalculateMove(CancellationToken cancelToken)
             
             // 이동 되돌리기
             stateManager.UndoLastMove(state, undoInfo);
-            
+            if (cancelToken.IsCancellationRequested) break;
+
             if (score > bestScore)
             {
                 bestScore = score;
@@ -301,6 +310,13 @@ protected override void CalculateMove(CancellationToken cancelToken)
 
         // 해시 키 계산
         ulong stateHash = ComputeStateHash(state);
+        // 반복 확인
+        // 반복 확인
+        if (positionHistory.ContainsKey(stateHash) && positionHistory[stateHash] >= 2)
+        {
+            if (debugMode) LogSafe($"[Minimax] 3회 반복 상태 발견: {stateHash}");
+            return 0; // 체스 규칙에 따라 3회 반복은 무승부 (0점)
+        }
 
         // 트랜스포지션 테이블 조회
         if (transpositionTable.TryGetValue(stateHash, out TranspositionEntry entry) && entry.Depth >= depth)
@@ -347,7 +363,7 @@ protected override void CalculateMove(CancellationToken cancelToken)
         // MVV-LVA로 이동 정렬
         if (legalMoves.Count > 0)
         {
-            stateManager.SortMovesByMVVLVA(legalMoves, state);
+            stateManager.SortMovesByMVVLVA (legalMoves, state);
         }
 
         // 합법적인 이동이 없으면 평가
@@ -377,7 +393,8 @@ protected override void CalculateMove(CancellationToken cancelToken)
 
         Move? bestMove = null;
         int bestScore = int.MinValue;
-
+        // 현재 위치 기록
+        AddPositionToHistory(stateHash);
         foreach (var move in legalMoves)
         {
             if (cancelToken.IsCancellationRequested) break;
@@ -412,7 +429,7 @@ protected override void CalculateMove(CancellationToken cancelToken)
                 BestMove = bestMove
             };
         }
-
+        RemovePositionFromHistory(stateHash);
         return bestScore;
     }
 
@@ -420,19 +437,33 @@ protected override void CalculateMove(CancellationToken cancelToken)
     private int QuiescenceSearch(ChessGameState state, int alpha, int beta, bool isMaximizingPlayer, CancellationToken cancelToken)
     {
         if (cancelToken.IsCancellationRequested) return 0;
-        LogSafe("퀴에센스 탐색 시작: 알파 = " + alpha + ", 베타 = " + beta);
-        nodesEvaluated++;
+        // 노드 평가 증가 (너무 자주 호출되므로 필요한 경우만 증가)
+        if (debugMode) nodesEvaluated++;
+        // 해시 키 계산
+        ulong stateHash = ComputeStateHash(state);
 
-        // 현재 상태 평가
+        // 트랜스포지션 테이블 조회 (Quiescence는 깊이를 0으로 간주)
+        if (transpositionTable.TryGetValue(stateHash, out TranspositionEntry entry) && entry.Depth == 0)
+        {
+            transpositionHits++;
+
+                return entry.Score;
+        }
+        // Stand-pat 평가 - 현재 위치에서의 기본 평가
         int standPat = EvaluatePosition(state);
 
-        // Beta 컷 확인
-        if (standPat >= beta)
+        // 현재 플레이어 관점에 맞게 변환
+        if (!state.IsWhiteTurn) standPat = -standPat;
+
+        int finalStandPat = isMaximizingPlayer ? standPat : -standPat;
+
+        // Beta 컷 확인 - 현재 위치가 이미 너무 좋다면 더 찾을 필요 없음
+        if (finalStandPat >= beta)
             return beta;
 
-        // Alpha 값 업데이트
-        if (standPat > alpha)
-            alpha = standPat;
+        // Alpha 값 업데이트 - 현재 위치가 지금까지의 최선책보다 좋다면
+        if (finalStandPat > alpha)
+            alpha = finalStandPat;
 
         // 캡처 이동만 생성 (새 리스트에 복사)
         List<Move> captureMoves = new List<Move>(stateManager.GenerateLegalMoves(state, false));
@@ -447,14 +478,13 @@ protected override void CalculateMove(CancellationToken cancelToken)
             if (cancelToken.IsCancellationRequested)
                 break;
 
+
             var undoInfo = stateManager.ApplyMoveWithUndo(state, move);
-            int score;
 
 
-                score = -QuiescenceSearch(state, -beta, -alpha, !isMaximizingPlayer, cancelToken);
+            int score = -QuiescenceSearch(state, -beta, -alpha, !isMaximizingPlayer, cancelToken);
 
                 stateManager.UndoLastMove(state, undoInfo);
-
 
 
             if (score >= beta)
@@ -463,6 +493,7 @@ protected override void CalculateMove(CancellationToken cancelToken)
             if (score > alpha)
                 alpha = score;
         }
+        StoreTranspositionEntry(stateHash, 0, alpha, null);
 
         return alpha;
     }
@@ -476,12 +507,7 @@ protected override void CalculateMove(CancellationToken cancelToken)
         {
             ulong bitboard = state.BitBoards[i];
             
-            // 비정상적인 값 확인
-            if (bitboard > 0x7FFFFFFFFFFFFFFF)
-            {
-                // 손상된 비트보드 감지 - 해싱에서 제외
-                continue;
-            }
+
             
             // 안전한 XOR 연산 사용
             hash = SafeBitwiseXor(hash, bitboard * (ulong)(i + 1));
@@ -869,11 +895,54 @@ protected override void CalculateMove(CancellationToken cancelToken)
         }
         LogSafe(boardVisualization);
     }
-    
 
-    /// <summary>
+    private void StoreTranspositionEntry(ulong hash, int depth, int score, Move? bestMove)
+    {
+        if (transpositionTable.Count >= MAX_TRANSPOSITION_SIZE)
+        {
+            // 가장 오래되거나 낮은 깊이의 항목을 교체하는 로직
+            if (!transpositionTable.TryGetValue(hash, out TranspositionEntry existing) ||
+                existing.Depth <= depth) // 더 깊은 탐색이나 같은 깊이라면 교체
+            {
+                // 업데이트하거나 추가
+                transpositionTable[hash] = new TranspositionEntry
+                {
+                    Depth = depth,
+                    Score = score,
+                    BestMove = bestMove
+                };
+            }
+        }
+        else
+        {
+            // 자리가 있으면 그냥 추가
+            transpositionTable[hash] = new TranspositionEntry
+            {
+                Depth = depth,
+                Score = score,
+                BestMove = bestMove
+            };
+        }
+    }
+    private void AddPositionToHistory(ulong hash)
+    {
+        if (positionHistory.ContainsKey(hash))
+            positionHistory[hash]++;
+        else
+            positionHistory[hash] = 1;
+    }
+
+    private void RemovePositionFromHistory(ulong hash)
+    {
+        if (positionHistory.ContainsKey(hash))
+        {
+            if (positionHistory[hash] > 1)
+                positionHistory[hash]--;
+            else
+                positionHistory.Remove(hash);
+        }
+    }
     /// 이동을 적용하고 되돌릴 수 있는 정보를 반환합니다.
-    /// </summary>
     public MoveUndoInfo ApplyMoveWithUndo(ChessGameState state, Move move)
     {
         int fromSquare = move.FromSquare;

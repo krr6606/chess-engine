@@ -11,7 +11,7 @@ public abstract class AIPlayer : BasePlayer
 {
 
     protected ChessGameState currentState;
-    [SerializeField] protected float thinkTime = 1.0f;
+    [SerializeField] protected float thinkTime = 2.0f;
     public float ThinkTime => thinkTime;
     protected float lastMoveTime;
     protected bool isThinking = false;
